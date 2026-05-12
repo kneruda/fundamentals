@@ -9,6 +9,8 @@ _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 def open_db(db_path: str | Path) -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(str(db_path))
     _run_migrations(con)
+    from src.compute import setup_views
+    setup_views(con)
     return con
 
 

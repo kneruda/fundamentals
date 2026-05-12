@@ -176,7 +176,7 @@ SHOP` adds an 11th ticker and backfills it in a single command.
 
 ---
 
-## Phase 4 — Computed multiples and technicals
+## Phase 4 — Computed multiples and technicals ✓ DONE
 
 **Deliverable**: every (ticker, date) has correct trailing multiples and
 technicals computable.
@@ -208,9 +208,16 @@ technicals computable.
 **Done when**: AAPL trailing P/E over 5 years matches public sources within
 ~1%; RBLX shows NULL P/E for all dates it had GAAP losses.
 
+**Implementation notes (from Phase 4 review)**:
+- TTM revenue, EBITDA, and FCF views were initially using the statement
+  table's own `report_date`; corrected to join `earnings_events` on
+  `(ticker, fiscal_period_end)` so all TTM views share one timing source.
+- Beta benchmark hardcoded to `'SPY'` was corrected to read
+  `benchmark.ticker` from `config/settings.yml` (value: `SPY.US`).
+
 ---
 
-## Phase 5 — MVP UI
+## Phase 5 — MVP UI ✓ DONE
 
 **Deliverable**: a working Streamlit dashboard with three pages.
 
@@ -247,6 +254,15 @@ technicals computable.
 **Done when**: user can open the app, browse the universe, click into a
 ticker, see all panels populated, and add a new ticker through the UI in
 under 30 seconds (including the backfill).
+
+**Implementation notes**:
+- `valuation_stats` (current vs. own median and percentile) is implemented
+  as a Python function in `queries.py` operating on a fetched DataFrame,
+  not SQL. DuckDB does not support `PERCENT_RANK() WITHIN GROUP` syntax.
+- `pandas.Styler.background_gradient` requires `matplotlib`; added to deps.
+- `pd.DataFrame.applymap()` removed in pandas 2.1 — use `.map()`.
+- `load_dotenv()` must be called in Streamlit page files that trigger EODHD
+  API calls; Streamlit doesn't inherit shell env vars reliably.
 
 ---
 
@@ -476,12 +492,12 @@ margin, NPL ratios, tier-1 capital; REIT-specific panels for FFO/AFFO).
 |---|---|---|
 | EODHD subscription tier / rate limits | Phase 2 | check EODHD account settings; throttle conservatively (e.g., 5 req/s) |
 | Archive every daily raw file, or just keep the latest? | Phase 2 | archive for first 90 days, then purge; flag in `settings.yml` |
-| Beta benchmark: SPY only, or also per-region (TPX, EWU)? | Phase 4 | SPY only for MVP; per-region in Phase 8 |
+| Beta benchmark: SPY only, or also per-region (TPX, EWU)? | ~~Phase 4~~ RESOLVED | SPY via `prices_daily`; add via `add_ticker("SPY")`. Per-region deferred to Phase 8. |
 | FX rate source — EODHD, ECB, Yahoo? | Phase 8 | EODHD if available (single vendor); else ECB |
 | Forward-snapshot retention — keep forever, or roll off after N years? | when table grows large | keep forever; revisit at 5 GB |
 | `analyst_estimates_history` — snapshot daily, or only on changes? | Phase 6 | daily for simplicity; can compress later by collapsing unchanged runs |
 | Should `remove_ticker` ever hard-delete? | Phase 3 | no; soft delete only. Provide a separate `purge_ticker` utility if ever needed |
-| Net debt formula for screens — which fields, exactly? | Phase 4 | `long_term_debt_total + short_term_debt - cash_and_short_term_investments`; document in `src/compute/` |
+| Net debt formula for screens — which fields, exactly? | ~~Phase 4~~ RESOLVED | `long_term_debt_total + short_term_debt - cash_and_short_term_investments`; see `src/compute/multiples.py` |
 
 ---
 

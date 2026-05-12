@@ -11,13 +11,32 @@ log = logging.getLogger(__name__)
 
 
 def add_ticker(con: duckdb.DuckDBPyConnection, ticker: str, notes: str | None = None) -> None:
-    """Fetch and ingest all history for ticker, then upsert it into the universe table."""
-    fetch_and_ingest(con, ticker)
-    con.execute(
-        "INSERT INTO universe (ticker, added_at, active, notes) VALUES (?, now(), true, ?)"
-        " ON CONFLICT (ticker) DO UPDATE SET active = true",
-        [ticker, notes],
-    )
+    """Fetch and ingest all history for ticker, then upsert it into the universe table.
+
+    For a brand-new ticker a pending (active=false) row is written before ingest starts,
+    so warehouse data is always traceable to a universe entry. If ingest fails the
+    pending row is removed. For an existing ticker the row is left as-is until ingest
+    succeeds, then set active=true and notes updated.
+    """
+    existing = con.execute("SELECT ticker FROM universe WHERE ticker = ?", [ticker]).fetchone()
+    is_new = existing is None
+
+    if is_new:
+        con.execute(
+            "INSERT INTO universe (ticker, added_at, active, notes) VALUES (?, now(), false, ?)",
+            [ticker, notes],
+        )
+    elif notes is not None:
+        con.execute("UPDATE universe SET notes = ? WHERE ticker = ?", [notes, ticker])
+
+    try:
+        fetch_and_ingest(con, ticker)
+    except Exception:
+        if is_new:
+            con.execute("DELETE FROM universe WHERE ticker = ?", [ticker])
+        raise
+
+    con.execute("UPDATE universe SET active = true WHERE ticker = ?", [ticker])
     log.info("added ticker=%s", ticker)
 
 

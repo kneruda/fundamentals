@@ -378,10 +378,38 @@ Things to **NOT do**, learned from the design conversation:
   snapshot-time observations, not facts about the company.
 - **Do not commit `.env`**. Use `.env.example` for documentation; `.env` is
   in `.gitignore`.
+- **Do not use `is` as a SQL table alias in DuckDB**. It is a reserved
+  keyword and the query will fail with a parser error. Use `stmt`, `s`, or
+  any other non-reserved alias for `income_statement`.
+- **Do not use `PERCENT_RANK() WITHIN GROUP (ORDER BY ...)` in DuckDB**.
+  That is PostgreSQL ordered-set aggregate syntax. DuckDB's `PERCENT_RANK()`
+  is a window function only. Compute percentile ranks in Python from a
+  fetched DataFrame instead.
+- **Do not use `pd.DataFrame.applymap()`**. It was removed in pandas 2.1;
+  use `.map()` for element-wise operations on DataFrames.
+- **Do not forget `load_dotenv()` in Streamlit pages that trigger EODHD
+  API calls**. Streamlit does not inherit shell environment variables the
+  same way scripts do. Call `load_dotenv()` at the top of any page that
+  calls `add_ticker()` or any fetch function.
+
+## Shell execution rules
+
+- **Never run `python -c "..."` (or `uv run python -c "..."`) with inline
+  Python that contains `#` comments.** The shell treats `#` as a comment
+  delimiter inside double-quoted strings on some configurations, which
+  silently truncates the script and causes the command to fail or hang.
+  Instead, write a small temporary `.py` file and run it with
+  `uv run python <file>`, or use a heredoc:
+  ```bash
+  uv run python - <<'EOF'
+  # comments are safe here
+  print("hello")
+  EOF
+  ```
 
 ## Build / test commands
 
-To be defined in Phase 0. Expected interface:
+Confirmed interface (as of Phase 5):
 
 ```bash
 uv sync                                  # install deps
@@ -420,6 +448,72 @@ consistent across splits — and the EPS coming out of `ttm_eps` is
 split-adjusted on the same basis because `Earnings.History` EPS values are
 already reported on a split-adjusted basis. The `universe` join is the
 standard way to scope a screen to currently-followed names.
+
+## Phase 4 decisions (resolved open questions)
+
+### Beta benchmark: SPY only
+
+SPY is loaded into `prices_daily` like any other ticker. To get beta computed
+in `technicals_daily`, run `add_ticker(con, "SPY")` once (or include it in
+`config/universe.yml` seed if desired). Beta is NULL for all dates where
+`prices_daily` has no 'SPY' row. Per-region benchmarks are deferred to Phase 8.
+
+### Net debt formula
+
+`long_term_debt_total + short_term_debt - cash_and_short_term_investments`
+(COALESCE to 0 for missing components). See `src/compute/multiples.py`.
+
+### Derived views live in Python, not in migrations
+
+TTM, multiples, and technicals views are created via `src/compute/ttm.py`,
+`src/compute/multiples.py`, and `src/compute/technicals.py` using
+`CREATE OR REPLACE VIEW`. `schema/runner.py::open_db()` calls
+`compute.setup_views(con)` after migrations so every connection has the views.
+No migration file is needed for views — they are code, not schema state.
+
+### `add_ticker` ordering fix
+
+As of Phase 4, `add_ticker` writes a pending `active=false` universe row
+**before** ingest begins so warehouse data is always traceable. On ingest
+failure for a brand-new ticker the pending row is removed, keeping the
+universe clean. Notes are updated when explicitly re-provided on re-add.
+
+## Phase 5 decisions (resolved open questions)
+
+### TTM timing unified to `earnings_events.report_date`
+
+All four TTM views (`ttm_eps`, `ttm_revenue`, `ttm_ebitda`, `ttm_fcf`) now
+source `report_date` from `earnings_events` by joining on
+`(ticker, fiscal_period_end)`. The initial implementation of `ttm_revenue`,
+`ttm_ebitda`, and `ttm_fcf` used the statement table's own `filing_date`,
+which diverged from `ttm_eps` (which always used `earnings_events`). Unified
+to prevent cross-multiple timing drift around earnings windows.
+
+Tests for revenue/EBITDA/FCF TTM now require `earnings_events` rows for the
+same fiscal periods — the join is inner-equivalent on `report_date IS NOT NULL`.
+
+### Beta benchmark ticker from settings
+
+`technicals_daily` reads `config/settings.yml → benchmark.ticker` at view
+creation time (`src/compute/technicals.py`). The ticker is injected into the
+SQL string, so changing the config and reconnecting updates the view.
+Default: `SPY.US`. Hardcoding `'SPY'` would silently produce NULL beta
+because EODHD uses the `.US` suffix convention.
+
+### `queries.py` layer: SQL and DataFrame computations
+
+`src/app/queries.py` is the single place for all data access. This includes
+both SQL queries (functions that take a `DuckDBPyConnection`) and pure
+DataFrame computations that are better expressed in Python (e.g.
+`valuation_stats`, which computes percentile rank from a fetched history
+DataFrame). Page files call only `queries.*` — no SQL or pandas aggregation
+in pages.
+
+### `matplotlib` required for `background_gradient`
+
+`pandas.Styler.background_gradient` requires matplotlib as a backend for
+color mapping. Added `matplotlib` to `[dependencies]` in `pyproject.toml`.
+Omitting it causes a hard `ImportError` at render time, not at import.
 
 ## When in doubt
 
