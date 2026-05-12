@@ -31,7 +31,6 @@ def _val_history(_con, ticker: str, years: int, mtime: float) -> pd.DataFrame:
     return queries.valuation_history(_con, ticker, years)
 
 
-
 @st.cache_data
 def _quarterly_metrics(_con, ticker: str, mtime: float) -> pd.DataFrame:
     return queries.quarterly_metrics(_con, ticker)
@@ -125,7 +124,7 @@ def main() -> None:
     price = header.get("price")
     pct_1d = header.get("pct_1d")
     mktcap_b = header.get("mktcap_b")
-    next_earnings = header.get("next_earnings")
+    next_earnings = header.get("next_period_end")
 
     st.title(f"{name} ({ticker})")
     st.caption(f"{sector} | {header.get('industry') or '—'}")
@@ -134,22 +133,30 @@ def main() -> None:
     col1.metric("Price", _fmt(price, "${:.2f}"), _pct(pct_1d) if pct_1d is not None else None)
     col2.metric("Market Cap", _billions(mktcap_b))
     col3.metric("Sector", sector)
-    col4.metric("Next Earnings", str(next_earnings) if next_earnings else "—")
+    col4.metric("Next Period End", str(next_earnings) if next_earnings else "—")
     col5.metric("Currency", header.get("currency") or "—")
 
     st.divider()
 
     # --- Tabs ---
-    tab_val, tab_prof, tab_analyst, tab_earn, tab_div, tab_stmts = st.tabs([
-        "Valuation", "Profitability", "Analyst", "Earnings", "Dividends", "Statements",
-    ])
+    tab_val, tab_prof, tab_analyst, tab_earn, tab_div, tab_stmts = st.tabs(
+        [
+            "Valuation",
+            "Profitability",
+            "Analyst",
+            "Earnings",
+            "Dividends",
+            "Statements",
+        ]
+    )
 
     # -------------------------------------------------------------------------
     # Valuation tab
     # -------------------------------------------------------------------------
     with tab_val:
-        years = st.radio("Period", [1, 3, 5], horizontal=True, index=2,
-                         format_func=lambda x: f"{x}Y")
+        years = st.radio(
+            "Period", [1, 3, 5], horizontal=True, index=2, format_func=lambda x: f"{x}Y"
+        )
 
         hist = _val_history(con, ticker, years, mtime)
         stats = queries.valuation_stats(hist)
@@ -165,16 +172,22 @@ def main() -> None:
             for col, label in multiples:
                 valid = hist.dropna(subset=[col])
                 if not valid.empty:
-                    fig.add_trace(go.Scatter(
-                        x=valid["date"], y=valid[col], name=label, mode="lines",
-                    ))
+                    fig.add_trace(
+                        go.Scatter(
+                            x=valid["date"],
+                            y=valid[col],
+                            name=label,
+                            mode="lines",
+                        )
+                    )
             fig.update_layout(
                 title="Trailing Multiples History",
-                xaxis_title=None, yaxis_title="Multiple",
+                xaxis_title=None,
+                yaxis_title="Multiple",
                 legend=dict(orientation="h"),
                 height=380,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("No valuation history available for this period.")
 
@@ -187,7 +200,7 @@ def main() -> None:
                 lambda x: _fmt(x, "{:.0f}th percentile") if pd.notna(x) else "—"
             )
             stats_display.columns = ["Multiple", "Current", f"{years}Y Median", "Percentile"]
-            st.dataframe(stats_display, hide_index=True, use_container_width=True)
+            st.dataframe(stats_display, hide_index=True, width="stretch")
 
     # -------------------------------------------------------------------------
     # Profitability tab
@@ -199,13 +212,15 @@ def main() -> None:
             qm = qm.sort_values("fiscal_period_end")
 
             fig_rev = go.Figure()
-            fig_rev.add_trace(go.Bar(
-                x=qm["fiscal_period_end"].astype(str),
-                y=qm["revenue_b"],
-                name="Revenue ($B)",
-            ))
+            fig_rev.add_trace(
+                go.Bar(
+                    x=qm["fiscal_period_end"].astype(str),
+                    y=qm["revenue_b"],
+                    name="Revenue ($B)",
+                )
+            )
             fig_rev.update_layout(title="Quarterly Revenue ($B)", height=280, showlegend=False)
-            st.plotly_chart(fig_rev, use_container_width=True)
+            st.plotly_chart(fig_rev, width="stretch")
 
             fig_margins = go.Figure()
             for col, label in [
@@ -215,26 +230,33 @@ def main() -> None:
                 ("fcf_margin_pct", "FCF"),
             ]:
                 valid = qm.dropna(subset=[col])
-                fig_margins.add_trace(go.Scatter(
-                    x=valid["fiscal_period_end"].astype(str),
-                    y=valid[col], name=label, mode="lines+markers",
-                ))
+                fig_margins.add_trace(
+                    go.Scatter(
+                        x=valid["fiscal_period_end"].astype(str),
+                        y=valid[col],
+                        name=label,
+                        mode="lines+markers",
+                    )
+                )
             fig_margins.update_layout(
-                title="Margins (%)", height=300,
+                title="Margins (%)",
+                height=300,
                 yaxis_ticksuffix="%",
                 legend=dict(orientation="h"),
             )
-            st.plotly_chart(fig_margins, use_container_width=True)
+            st.plotly_chart(fig_margins, width="stretch")
 
             fig_roe = go.Figure()
             valid_roe = qm.dropna(subset=["roe_pct"])
-            fig_roe.add_trace(go.Bar(
-                x=valid_roe["fiscal_period_end"].astype(str),
-                y=valid_roe["roe_pct"],
-                name="ROE %",
-            ))
+            fig_roe.add_trace(
+                go.Bar(
+                    x=valid_roe["fiscal_period_end"].astype(str),
+                    y=valid_roe["roe_pct"],
+                    name="ROE %",
+                )
+            )
             fig_roe.update_layout(title="Return on Equity (%)", height=250, showlegend=False)
-            st.plotly_chart(fig_roe, use_container_width=True)
+            st.plotly_chart(fig_roe, width="stretch")
         else:
             st.info("No quarterly data available.")
 
@@ -250,32 +272,40 @@ def main() -> None:
             with col_gauge:
                 rating = snap.get("consensus_rating")
                 if rating is not None:
-                    fig_gauge = go.Figure(go.Indicator(
-                        mode="gauge+number",
-                        value=rating,
-                        gauge={
-                            "axis": {"range": [1, 5], "tickvals": [1, 2, 3, 4, 5],
-                                     "ticktext": ["Strong Buy", "Buy", "Hold", "Sell", "Strong Sell"]},
-                            "bar": {"color": "steelblue"},
-                            "steps": [
-                                {"range": [1, 2], "color": "#2ecc71"},
-                                {"range": [2, 3], "color": "#a8d8a8"},
-                                {"range": [3, 4], "color": "#f39c12"},
-                                {"range": [4, 5], "color": "#e74c3c"},
-                            ],
-                        },
-                        title={"text": "Consensus Rating"},
-                    ))
+                    fig_gauge = go.Figure(
+                        go.Indicator(
+                            mode="gauge+number",
+                            value=rating,
+                            gauge={
+                                "axis": {
+                                    "range": [1, 5],
+                                    "tickvals": [1, 2, 3, 4, 5],
+                                    "ticktext": [
+                                        "Strong Buy",
+                                        "Buy",
+                                        "Hold",
+                                        "Sell",
+                                        "Strong Sell",
+                                    ],
+                                },
+                                "bar": {"color": "steelblue"},
+                                "steps": [
+                                    {"range": [1, 2], "color": "#2ecc71"},
+                                    {"range": [2, 3], "color": "#a8d8a8"},
+                                    {"range": [3, 4], "color": "#f39c12"},
+                                    {"range": [4, 5], "color": "#e74c3c"},
+                                ],
+                            },
+                            title={"text": "Consensus Rating"},
+                        )
+                    )
                     fig_gauge.update_layout(height=300)
-                    st.plotly_chart(fig_gauge, use_container_width=True)
+                    st.plotly_chart(fig_gauge, width="stretch")
 
             with col_info:
                 latest_price = header.get("price")
                 target = snap.get("target_price")
-                upside = (
-                    (target / latest_price - 1) * 100
-                    if target and latest_price else None
-                )
+                upside = (target / latest_price - 1) * 100 if target and latest_price else None
                 st.metric("Consensus Target", _fmt(target, "${:.2f}"))
                 st.metric("Implied Upside", _pct(upside) if upside is not None else "—")
                 st.metric("Forward EPS (curr Y)", _fmt(snap.get("eps_est_curr_y"), "${:.2f}"))
@@ -293,16 +323,19 @@ def main() -> None:
             total = sum(counts.values())
             if total > 0:
                 colors = ["#2ecc71", "#a8d8a8", "#f39c12", "#e74c3c", "#c0392b"]
-                fig_dist = go.Figure(go.Bar(
-                    x=list(counts.keys()),
-                    y=list(counts.values()),
-                    marker_color=colors,
-                ))
+                fig_dist = go.Figure(
+                    go.Bar(
+                        x=list(counts.keys()),
+                        y=list(counts.values()),
+                        marker_color=colors,
+                    )
+                )
                 fig_dist.update_layout(
                     title=f"Analyst Rating Distribution (n={total})",
-                    height=280, showlegend=False,
+                    height=280,
+                    showlegend=False,
                 )
-                st.plotly_chart(fig_dist, use_container_width=True)
+                st.plotly_chart(fig_dist, width="stretch")
         else:
             st.info("No analyst snapshot data available.")
 
@@ -317,44 +350,61 @@ def main() -> None:
             earn["period"] = earn["fiscal_period_end"].astype(str)
 
             fig_surprise = go.Figure()
-            colors = ["#2ecc71" if v >= 0 else "#e74c3c"
-                      for v in earn["surprise_percent"].fillna(0)]
-            fig_surprise.add_trace(go.Bar(
-                x=earn["period"],
-                y=earn["surprise_percent"],
-                name="EPS Surprise %",
-                marker_color=colors,
-            ))
-            fig_surprise.update_layout(
-                title="EPS Surprise %", height=280,
-                yaxis_ticksuffix="%", showlegend=False,
+            colors = [
+                "#2ecc71" if v >= 0 else "#e74c3c" for v in earn["surprise_percent"].fillna(0)
+            ]
+            fig_surprise.add_trace(
+                go.Bar(
+                    x=earn["period"],
+                    y=earn["surprise_percent"],
+                    name="EPS Surprise %",
+                    marker_color=colors,
+                )
             )
-            st.plotly_chart(fig_surprise, use_container_width=True)
+            fig_surprise.update_layout(
+                title="EPS Surprise %",
+                height=280,
+                yaxis_ticksuffix="%",
+                showlegend=False,
+            )
+            st.plotly_chart(fig_surprise, width="stretch")
 
             fig_react = go.Figure()
-            react_colors = ["#2ecc71" if v >= 0 else "#e74c3c"
-                            for v in earn["next_day_return_pct"].fillna(0)]
-            fig_react.add_trace(go.Bar(
-                x=earn["period"],
-                y=earn["next_day_return_pct"],
-                name="Next-Day Return %",
-                marker_color=react_colors,
-            ))
-            fig_react.update_layout(
-                title="Next-Day Price Reaction %", height=280,
-                yaxis_ticksuffix="%", showlegend=False,
+            react_colors = [
+                "#2ecc71" if v >= 0 else "#e74c3c" for v in earn["next_day_return_pct"].fillna(0)
+            ]
+            fig_react.add_trace(
+                go.Bar(
+                    x=earn["period"],
+                    y=earn["next_day_return_pct"],
+                    name="Next-Day Return %",
+                    marker_color=react_colors,
+                )
             )
-            st.plotly_chart(fig_react, use_container_width=True)
+            fig_react.update_layout(
+                title="Next-Day Price Reaction %",
+                height=280,
+                yaxis_ticksuffix="%",
+                showlegend=False,
+            )
+            st.plotly_chart(fig_react, width="stretch")
 
-            display = earn[["period", "eps_estimate", "eps_actual", "surprise_percent",
-                             "next_day_return_pct"]].copy()
+            display = earn[
+                ["period", "eps_estimate", "eps_actual", "surprise_percent", "next_day_return_pct"]
+            ].copy()
             display.columns = ["Period", "EPS Est.", "EPS Actual", "Surprise %", "Next-Day %"]
             st.dataframe(
-                display.style.format({
-                    "EPS Est.": "${:.2f}", "EPS Actual": "${:.2f}",
-                    "Surprise %": "{:.1f}%", "Next-Day %": "{:.2f}%",
-                }, na_rep="—"),
-                hide_index=True, use_container_width=True,
+                display.style.format(
+                    {
+                        "EPS Est.": "${:.2f}",
+                        "EPS Actual": "${:.2f}",
+                        "Surprise %": "{:.1f}%",
+                        "Next-Day %": "{:.2f}%",
+                    },
+                    na_rep="—",
+                ),
+                hide_index=True,
+                width="stretch",
             )
         else:
             st.info("No earnings history available.")
@@ -379,15 +429,19 @@ def main() -> None:
 
         if not annual.empty:
             annual_sorted = annual.sort_values("year")
-            fig_div = go.Figure(go.Bar(
-                x=annual_sorted["year"].astype(str),
-                y=annual_sorted["n_dividends"],
-                name="Dividends per Year",
-            ))
-            fig_div.update_layout(
-                title="Dividends Paid per Year", height=260, showlegend=False,
+            fig_div = go.Figure(
+                go.Bar(
+                    x=annual_sorted["year"].astype(str),
+                    y=annual_sorted["n_dividends"],
+                    name="Dividends per Year",
+                )
             )
-            st.plotly_chart(fig_div, use_container_width=True)
+            fig_div.update_layout(
+                title="Dividends Paid per Year",
+                height=260,
+                showlegend=False,
+            )
+            st.plotly_chart(fig_div, width="stretch")
 
     # -------------------------------------------------------------------------
     # Statements tab
@@ -401,19 +455,21 @@ def main() -> None:
                 display = _statements_display(is_df)
                 # Scale to billions
                 display = display.map(
-                    lambda v: f"${v/1e9:.2f}B" if pd.notna(v) and isinstance(v, (int, float)) else "—"
+                    lambda v: (
+                        f"${v/1e9:.2f}B" if pd.notna(v) and isinstance(v, (int, float)) else "—"
+                    )
                 )
                 labels = {
-                    "total_revenue":    "Revenue",
-                    "gross_profit":     "Gross Profit",
-                    "ebitda":           "EBITDA",
+                    "total_revenue": "Revenue",
+                    "gross_profit": "Gross Profit",
+                    "ebitda": "EBITDA",
                     "operating_income": "Operating Income",
-                    "net_income":       "Net Income",
+                    "net_income": "Net Income",
                     "interest_expense": "Interest Expense",
                     "research_development": "R&D",
                 }
                 display.index = [labels.get(i, i) for i in display.index]
-                st.dataframe(display, use_container_width=True)
+                st.dataframe(display, width="stretch")
             else:
                 st.info("No income statement data.")
 
@@ -422,20 +478,22 @@ def main() -> None:
             if not bs_df.empty:
                 display = _statements_display(bs_df)
                 display = display.map(
-                    lambda v: f"${v/1e9:.2f}B" if pd.notna(v) and isinstance(v, (int, float)) else "—"
+                    lambda v: (
+                        f"${v/1e9:.2f}B" if pd.notna(v) and isinstance(v, (int, float)) else "—"
+                    )
                 )
                 labels = {
                     "cash_and_short_term_investments": "Cash & ST Investments",
-                    "total_current_assets":  "Total Current Assets",
-                    "total_assets":          "Total Assets",
+                    "total_current_assets": "Total Current Assets",
+                    "total_assets": "Total Assets",
                     "total_current_liabilities": "Total Current Liabilities",
-                    "long_term_debt_total":  "Long-Term Debt",
-                    "short_term_debt":       "Short-Term Debt",
+                    "long_term_debt_total": "Long-Term Debt",
+                    "short_term_debt": "Short-Term Debt",
                     "total_stockholder_equity": "Stockholder Equity",
-                    "net_debt":              "Net Debt (computed)",
+                    "net_debt": "Net Debt (computed)",
                 }
                 display.index = [labels.get(i, i) for i in display.index]
-                st.dataframe(display, use_container_width=True)
+                st.dataframe(display, width="stretch")
             else:
                 st.info("No balance sheet data.")
 
@@ -444,17 +502,19 @@ def main() -> None:
             if not cf_df.empty:
                 display = _statements_display(cf_df)
                 display = display.map(
-                    lambda v: f"${v/1e9:.2f}B" if pd.notna(v) and isinstance(v, (int, float)) else "—"
+                    lambda v: (
+                        f"${v/1e9:.2f}B" if pd.notna(v) and isinstance(v, (int, float)) else "—"
+                    )
                 )
                 labels = {
                     "total_cash_from_operating_activities": "Operating CF",
                     "capital_expenditures": "CapEx",
-                    "free_cash_flow":       "Free Cash Flow",
-                    "dividends_paid":       "Dividends Paid",
-                    "net_borrowings":       "Net Borrowings",
+                    "free_cash_flow": "Free Cash Flow",
+                    "dividends_paid": "Dividends Paid",
+                    "net_borrowings": "Net Borrowings",
                 }
                 display.index = [labels.get(i, i) for i in display.index]
-                st.dataframe(display, use_container_width=True)
+                st.dataframe(display, width="stretch")
             else:
                 st.info("No cash flow data.")
 

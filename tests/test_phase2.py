@@ -227,7 +227,7 @@ def test_fetch_appends_exchange_suffix(monkeypatch):
                 pass
 
             def json(self):
-                return {}
+                return {"General": {"Code": "MSFT", "CurrencyCode": "USD"}}
 
         return FakeResp()
 

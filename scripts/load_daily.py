@@ -6,7 +6,7 @@ Usage:
 """
 
 import logging
-import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,18 +19,16 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-import sys  # noqa: E402
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.ingest.orchestrator import ingest_universe  # noqa: E402
-from src.schema.runner import open_db  # noqa: E402
+from src.schema.runner import open_db, warehouse_path  # noqa: E402
 
 
 def main() -> None:
-    warehouse = os.environ.get("WAREHOUSE_PATH", "data/warehouse.duckdb")
-    Path(warehouse).parent.mkdir(parents=True, exist_ok=True)
-    con = open_db(warehouse)
+    warehouse = warehouse_path()
+    warehouse.parent.mkdir(parents=True, exist_ok=True)
+    con = open_db(str(warehouse))
     try:
         ingest_universe(con)
     finally:

@@ -266,7 +266,7 @@ under 30 seconds (including the backfill).
 
 ---
 
-## Phase 6 — Daily forward snapshot
+## Phase 6 — Daily forward snapshot ✓ DONE
 
 **Deliverable**: append-only collection of analyst expectations, running
 routinely.
@@ -322,7 +322,94 @@ filtered live.
 
 ---
 
-## Phase 8 — FX activation
+## Phase 8 — Sector view + bulk ticker upload
+
+**Deliverable**: sector aggregate page with drill-down, plus a bulk import
+flow so users can add many tickers at once.
+
+### Sector view
+
+- `src/app/pages/3_Sectors.py`: group by GIC sector and sub-industry from
+  `security_master`. Show median trailing multiples, growth rates, margins,
+  and dividend yield for each sector / sub-industry. Clicking a sector row
+  expands to show constituent tickers with their individual values.
+- Screen queries live in `src/screens/sectors.py`; the page imports them via
+  `queries.py` — no raw SQL in page files.
+- Tests: query runs on the MVP universe fixture without error; median P/E for
+  a sector matches a hand-computed value.
+
+**Done when**: useful as a starting point for "where are the cheap sectors
+right now?".
+
+### Bulk ticker upload
+
+Add a bulk-add flow to the Universe management page
+(`src/app/pages/2_Universe.py`):
+
+- **Textarea input**: user pastes a list of tickers, one per line.
+- **File uploader**: accepts a plain-text `.txt` file with one ticker per
+  line.
+- Lines starting with `#` and blank/whitespace-only lines are ignored —
+  allows commented-out tickers in a file.
+- For US equities, the exchange suffix is optional: `AAPL` is treated
+  identically to `AAPL.US` because the fetch layer appends `.US`
+  automatically for bare tickers. Non-US tickers require the full vendor
+  format (`7203.TSE`, `SHOP.TO`, etc.).
+- A progress area shows the result (added / already present / failed) for
+  each ticker as the batch runs. One ticker failing does not abort the rest.
+- `bulk_add_tickers(con, tickers)` in `src/universe.py` calls
+  `add_ticker()` for each and returns `list[tuple[str, bool, str]]`
+  (ticker, ok, message). The UI calls this and renders the results table.
+- Tests:
+  - Parse: whitespace-only lines and comment lines are stripped; bare
+    tickers pass through unchanged.
+  - Mixed success/failure batch: one invalid ticker is reported as failed,
+    the rest succeed; no partial-ingest universe rows left behind.
+  - Idempotency: bulk-adding a ticker already in the universe re-runs ingest
+    but does not duplicate the universe row.
+
+**Done when**: user can paste `AAPL\nMSFT\nGOOG` into the textarea and have
+all three added in one action; uploading a `.txt` file produces the same
+result.
+
+---
+
+## Phase 9 — UI improvements
+
+**Deliverable**: quality-of-life enhancements to the dashboard. This phase
+is intentionally open-ended — each item should be small and independently
+testable.
+
+### Price history date range in Universe view
+
+Add `price_start` and `price_end` columns to the Universe management table
+(`src/app/pages/2_Universe.py`) showing the earliest and latest date in
+`prices_daily` for each ticker. These come from a new query in `queries.py`:
+
+```python
+def universe_price_dates(con) -> pd.DataFrame:
+    # Returns ticker, price_start (MIN date), price_end (MAX date)
+```
+
+The Universe management table is extended with these columns so gaps or
+stale feeds are visible at a glance without querying DuckDB directly.
+
+Tests:
+- `universe_price_dates` returns the correct min/max for a loaded fixture.
+- Tickers with no price rows show `NULL` / `None` for both columns, not an
+  error.
+
+### Additional items
+
+Leave room here for future UI improvements. Each new item gets a subsection
+with a description and acceptance criteria before implementation begins.
+
+**Done when**: Universe management page shows price start/end dates for all
+active tickers, populated after a standard ingest.
+
+---
+
+## Phase 10 — FX activation
 
 **Deliverable**: the warehouse handles non-USD tickers correctly; USD
 equivalents available throughout.
@@ -341,7 +428,7 @@ end-to-end with correct currency display.
 
 ---
 
-## Phase 9 — Forward-looking screens
+## Phase 11 — Forward-looking screens
 
 **Deliverable**: screens that exploit accumulated daily snapshots. **Requires
 ≥30 days of Phase 6 data before they produce signal.**
@@ -356,20 +443,6 @@ end-to-end with correct currency display.
   `analyst_estimates_history`, added to `src/screens/`.
 
 **Done when**: user can answer "what changed this week in my universe?"
-
----
-
-## Phase 10 — Sector view
-
-**Deliverable**: aggregate page showing sector / industry medians with
-drill-down.
-
-- `src/app/pages/4_Sectors.py`: group by GIC sector and sub-industry. Show
-  median multiples / growth / margins / yield. Click a row to see
-  constituents.
-
-**Done when**: useful as a starting point for "where are the cheap sectors
-right now".
 
 ---
 
@@ -492,8 +565,8 @@ margin, NPL ratios, tier-1 capital; REIT-specific panels for FFO/AFFO).
 |---|---|---|
 | EODHD subscription tier / rate limits | Phase 2 | check EODHD account settings; throttle conservatively (e.g., 5 req/s) |
 | Archive every daily raw file, or just keep the latest? | Phase 2 | archive for first 90 days, then purge; flag in `settings.yml` |
-| Beta benchmark: SPY only, or also per-region (TPX, EWU)? | ~~Phase 4~~ RESOLVED | SPY via `prices_daily`; add via `add_ticker("SPY")`. Per-region deferred to Phase 8. |
-| FX rate source — EODHD, ECB, Yahoo? | Phase 8 | EODHD if available (single vendor); else ECB |
+| Beta benchmark: SPY only, or also per-region (TPX, EWU)? | ~~Phase 4~~ RESOLVED | SPY via `prices_daily`; add via `add_ticker("SPY")`. Per-region deferred to Phase 10. |
+| FX rate source — EODHD, ECB, Yahoo? | Phase 10 | EODHD if available (single vendor); else ECB |
 | Forward-snapshot retention — keep forever, or roll off after N years? | when table grows large | keep forever; revisit at 5 GB |
 | `analyst_estimates_history` — snapshot daily, or only on changes? | Phase 6 | daily for simplicity; can compress later by collapsing unchanged runs |
 | Should `remove_ticker` ever hard-delete? | Phase 3 | no; soft delete only. Provide a separate `purge_ticker` utility if ever needed |

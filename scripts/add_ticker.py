@@ -7,7 +7,6 @@ Usage:
 """
 
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -23,7 +22,7 @@ log = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.schema.runner import open_db  # noqa: E402
+from src.schema.runner import open_db, warehouse_path  # noqa: E402
 from src.universe import add_ticker  # noqa: E402
 
 
@@ -32,9 +31,9 @@ def main() -> None:
         print("usage: add_ticker.py <TICKER>")
         sys.exit(1)
     ticker = sys.argv[1].upper()
-    warehouse = os.environ.get("WAREHOUSE_PATH", "data/warehouse.duckdb")
-    Path(warehouse).parent.mkdir(parents=True, exist_ok=True)
-    con = open_db(warehouse)
+    warehouse = warehouse_path()
+    warehouse.parent.mkdir(parents=True, exist_ok=True)
+    con = open_db(str(warehouse))
     try:
         add_ticker(con, ticker)
     except Exception as exc:

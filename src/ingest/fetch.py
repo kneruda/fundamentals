@@ -56,7 +56,12 @@ def fetch_fundamentals(ticker: str) -> dict:
     if "." not in ticker:
         ticker = f"{ticker}.{exchange}"
     url = f"{base_url}/fundamentals/{ticker}"
-    return _get(url, {"api_token": _token(), "fmt": "json"}, vendor)
+    data = _get(url, {"api_token": _token(), "fmt": "json"}, vendor)
+    if isinstance(data, dict) and "Error" in data:
+        raise ValueError(f"EODHD rejected ticker: {data['Error']}")
+    if not isinstance(data, dict) or not data.get("General", {}).get("Code"):
+        raise ValueError(f"No valid General.Code in EODHD response for {ticker!r}")
+    return data
 
 
 def fetch_prices(ticker: str) -> list:
@@ -67,4 +72,9 @@ def fetch_prices(ticker: str) -> list:
     if "." not in ticker:
         ticker = f"{ticker}.{exchange}"
     url = f"{base_url}/eod/{ticker}"
-    return _get(url, {"api_token": _token(), "fmt": "json", "period": "d"}, vendor)
+    data = _get(url, {"api_token": _token(), "fmt": "json", "period": "d"}, vendor)
+    if isinstance(data, dict) and "Error" in data:
+        raise ValueError(f"EODHD prices error for {ticker!r}: {data['Error']}")
+    if not isinstance(data, list):
+        raise ValueError(f"Unexpected price data format for {ticker!r}")
+    return data

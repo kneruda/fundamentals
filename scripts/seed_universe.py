@@ -8,7 +8,6 @@ Usage:
 """
 
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -24,16 +23,16 @@ log = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.schema.runner import open_db  # noqa: E402
+from src.schema.runner import open_db, warehouse_path  # noqa: E402
 from src.universe import seed_from_config  # noqa: E402
 
 _UNIVERSE_YML = Path(__file__).parent.parent / "config" / "universe.yml"
 
 
 def main() -> None:
-    warehouse = os.environ.get("WAREHOUSE_PATH", "data/warehouse.duckdb")
-    Path(warehouse).parent.mkdir(parents=True, exist_ok=True)
-    con = open_db(warehouse)
+    warehouse = warehouse_path()
+    warehouse.parent.mkdir(parents=True, exist_ok=True)
+    con = open_db(str(warehouse))
     try:
         seed_from_config(con, _UNIVERSE_YML)
     finally:

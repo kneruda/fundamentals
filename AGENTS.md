@@ -348,6 +348,20 @@ camelCase vendor names; downstream code reads only snake_case.
 
 Things to **NOT do**, learned from the design conversation:
 
+- **Do not trust EODHD 200 responses blindly.** A successful HTTP 200 can
+  carry `{"Error": "Ticker Not Found."}`. `fetch_fundamentals()` and
+  `fetch_prices()` validate the response shape and raise `ValueError` before
+  returning; do not bypass this check or return raw responses to callers
+  who assume they are well-formed.
+- **Do not hard-code or use CWD-relative warehouse paths in scripts.** Use
+  `runner.warehouse_path()`, which reads from `config/settings.yml` and
+  returns an absolute path. A CWD-relative default (`"data/warehouse.duckdb"`)
+  will silently point at a different file when a script is run from outside
+  the project root.
+- **Do not use `use_container_width=True` in Streamlit.** The parameter was
+  deprecated in Streamlit 1.35+ and removed in 1.57+. Use `width="stretch"`
+  (the equivalent for full-container width) or `width="content"` for
+  auto-sizing.
 - **Do not store vendor-computed multiples** (`Valuation.TrailingPE`,
   `Highlights.MarketCapitalization`, `Highlights.PERatio`, etc.) for
   historical purposes. Compute them. They go stale, can disagree with the
@@ -409,7 +423,7 @@ Things to **NOT do**, learned from the design conversation:
 
 ## Build / test commands
 
-Confirmed interface (as of Phase 5):
+Confirmed interface (as of Phase 6):
 
 ```bash
 uv sync                                  # install deps
@@ -456,7 +470,7 @@ standard way to scope a screen to currently-followed names.
 SPY is loaded into `prices_daily` like any other ticker. To get beta computed
 in `technicals_daily`, run `add_ticker(con, "SPY")` once (or include it in
 `config/universe.yml` seed if desired). Beta is NULL for all dates where
-`prices_daily` has no 'SPY' row. Per-region benchmarks are deferred to Phase 8.
+`prices_daily` has no 'SPY' row. Per-region benchmarks are deferred to Phase 10.
 
 ### Net debt formula
 
@@ -514,6 +528,58 @@ in pages.
 `pandas.Styler.background_gradient` requires matplotlib as a backend for
 color mapping. Added `matplotlib` to `[dependencies]` in `pyproject.toml`.
 Omitting it causes a hard `ImportError` at render time, not at import.
+
+## Phase 6 decisions (resolved open questions)
+
+### EODHD error responses validated at the fetch layer
+
+`fetch_fundamentals()` and `fetch_prices()` now validate the vendor response
+before returning it to callers:
+
+- A response dict containing an `"Error"` key (EODHD's 200-style error format,
+  e.g., `{"Error": "Ticker Not Found."}`) raises `ValueError` immediately.
+- A fundamentals response missing `General.Code` raises `ValueError` — this
+  catches truncated or malformed payloads that would otherwise silently ingest
+  empty data.
+- A prices response that is not a JSON array raises `ValueError`.
+
+Per-section error swallowing in `ingest_ticker()` is still in place for the
+daily refresh path (a corrupted section should not abort other sections).
+However, `fetch_and_ingest()` now fails fast on the fetch itself, which means
+`add_ticker()` cannot activate a ticker when EODHD returns a plausible-looking
+but invalid payload.
+
+### Warehouse path centralized in `src/schema/runner.py`
+
+`runner.warehouse_path()` returns the absolute warehouse path from
+`config/settings.yml`, with `WAREHOUSE_PATH` env var as an explicit override.
+All three CLI scripts (`load_daily.py`, `add_ticker.py`, `seed_universe.py`)
+call `warehouse_path()` instead of defaulting to a CWD-relative string. This
+guarantees that ETL scripts and the Streamlit app always point at the same
+database file, regardless of the working directory from which a script is run
+or how cron invokes it.
+
+### Snapshot coverage on Universe management page
+
+`queries.snapshot_coverage()` returns a per-active-ticker summary: first/last
+snapshot date and total days collected. The Universe management page exposes
+this as a table so ingestion gaps are visible at a glance. Forward-looking
+screens (Phase 11) require ≥ 30 days of snapshot history per ticker.
+
+### `next_period_end` replaces `next_earnings`
+
+The Deep Dive header field and query column previously named `next_earnings`
+has been renamed to `next_period_end` throughout `queries.py` and the page.
+The metric label on the Deep Dive header is now "Next Period End". This
+accurately reflects the source field (`earnings_events.fiscal_period_end`),
+which is the end of the upcoming fiscal quarter, not the actual report date.
+
+### Streamlit width API
+
+`use_container_width=True` was deprecated in Streamlit 1.35+ and replaced by
+`width="stretch"` (which is also the default for most layout-aware components).
+All `st.plotly_chart`, `st.dataframe`, and related calls now use
+`width="stretch"` explicitly rather than the deprecated parameter.
 
 ## When in doubt
 

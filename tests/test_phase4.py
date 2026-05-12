@@ -76,7 +76,9 @@ def insert_income_stmt(con, ticker, fiscal_period_end, report_date, total_revenu
     )
 
 
-def insert_balance_sheet(con, ticker, fiscal_period_end, report_date, equity, shares, ltd, std, cash):
+def insert_balance_sheet(
+    con, ticker, fiscal_period_end, report_date, equity, shares, ltd, std, cash
+):
     con.execute(
         "INSERT INTO balance_sheet"
         " (ticker, fiscal_period_end, report_date, currency,"
@@ -111,10 +113,20 @@ def insert_cashflow(con, ticker, fiscal_period_end, report_date, fcf):
 
 
 def test_views_exist(db):
-    views = {r[0] for r in db.execute(
-        "SELECT table_name FROM information_schema.views WHERE table_schema='main'"
-    ).fetchall()}
-    for v in ("ttm_eps", "ttm_revenue", "ttm_ebitda", "ttm_fcf", "trailing_multiples_daily", "technicals_daily"):
+    views = {
+        r[0]
+        for r in db.execute(
+            "SELECT table_name FROM information_schema.views WHERE table_schema='main'"
+        ).fetchall()
+    }
+    for v in (
+        "ttm_eps",
+        "ttm_revenue",
+        "ttm_ebitda",
+        "ttm_fcf",
+        "trailing_multiples_daily",
+        "technicals_daily",
+    ):
         assert v in views, f"missing view: {v}"
 
 
@@ -125,27 +137,36 @@ def test_views_exist(db):
 
 def test_ttm_eps_requires_four_quarters(db):
     """Only rows with exactly 4 quarters of actuals appear in ttm_eps."""
-    insert_earnings(db, [
-        ("T", "2023-03-31", "2023-04-28", 1.0),
-        ("T", "2023-06-30", "2023-07-28", 1.2),
-        ("T", "2023-09-30", "2023-10-27", 1.1),
-    ])
+    insert_earnings(
+        db,
+        [
+            ("T", "2023-03-31", "2023-04-28", 1.0),
+            ("T", "2023-06-30", "2023-07-28", 1.2),
+            ("T", "2023-09-30", "2023-10-27", 1.1),
+        ],
+    )
     rows = db.execute("SELECT * FROM ttm_eps WHERE ticker='T'").fetchall()
     assert rows == [], "expected no TTM rows with only 3 quarters"
 
 
 def test_ttm_eps_value(db):
     """TTM EPS is the rolling 4-quarter sum of eps_actual."""
-    insert_earnings(db, [
-        ("T", "2023-03-31", "2023-04-28", 1.0),
-        ("T", "2023-06-30", "2023-07-28", 1.2),
-        ("T", "2023-09-30", "2023-10-27", 1.1),
-        ("T", "2023-12-31", "2024-02-01", 2.0),  # TTM = 5.30
-        ("T", "2024-03-31", "2024-04-26", 1.5),  # TTM = 5.80
-    ])
-    rows = {r[0]: r[2] for r in db.execute(
-        "SELECT report_date, ticker, ttm_eps FROM ttm_eps WHERE ticker='T' ORDER BY report_date"
-    ).fetchall()}
+    insert_earnings(
+        db,
+        [
+            ("T", "2023-03-31", "2023-04-28", 1.0),
+            ("T", "2023-06-30", "2023-07-28", 1.2),
+            ("T", "2023-09-30", "2023-10-27", 1.1),
+            ("T", "2023-12-31", "2024-02-01", 2.0),  # TTM = 5.30
+            ("T", "2024-03-31", "2024-04-26", 1.5),  # TTM = 5.80
+        ],
+    )
+    rows = {
+        r[0]: r[2]
+        for r in db.execute(
+            "SELECT report_date, ticker, ttm_eps FROM ttm_eps WHERE ticker='T' ORDER BY report_date"
+        ).fetchall()
+    }
     assert math.isclose(rows[date(2024, 2, 1)], 5.30, rel_tol=1e-9)
     assert math.isclose(rows[date(2024, 4, 26)], 5.80, rel_tol=1e-9)
 
@@ -157,37 +178,51 @@ def test_ttm_eps_value(db):
 
 def test_pe_uses_prior_ttm_before_report_date(db):
     """Price on day before earnings uses old TTM EPS; on report date uses new."""
-    insert_earnings(db, [
-        ("T", "2023-03-31", "2023-04-28", 1.0),
-        ("T", "2023-06-30", "2023-07-28", 1.2),
-        ("T", "2023-09-30", "2023-10-27", 1.1),
-        ("T", "2023-12-31", "2024-02-01", 2.0),  # TTM1 = 5.30
-        ("T", "2024-03-31", "2024-04-26", 1.5),  # TTM2 = 5.80
-    ])
+    insert_earnings(
+        db,
+        [
+            ("T", "2023-03-31", "2023-04-28", 1.0),
+            ("T", "2023-06-30", "2023-07-28", 1.2),
+            ("T", "2023-09-30", "2023-10-27", 1.1),
+            ("T", "2023-12-31", "2024-02-01", 2.0),  # TTM1 = 5.30
+            ("T", "2024-03-31", "2024-04-26", 1.5),  # TTM2 = 5.80
+        ],
+    )
     insert_shares(db, "T", "2024-01-01", 1_000_000)
-    insert_prices(db, [
-        ("T", "2024-04-25", 100.0),  # day before new earnings
-        ("T", "2024-04-26", 100.0),  # report date for Q1 2024
-    ])
+    insert_prices(
+        db,
+        [
+            ("T", "2024-04-25", 100.0),  # day before new earnings
+            ("T", "2024-04-26", 100.0),  # report date for Q1 2024
+        ],
+    )
 
-    rows = {r[0]: r[1] for r in db.execute(
-        "SELECT date, pe_trailing FROM trailing_multiples_daily WHERE ticker='T' ORDER BY date"
-    ).fetchall()}
+    rows = {
+        r[0]: r[1]
+        for r in db.execute(
+            "SELECT date, pe_trailing FROM trailing_multiples_daily WHERE ticker='T' ORDER BY date"
+        ).fetchall()
+    }
 
-    assert math.isclose(rows[date(2024, 4, 25)], 100.0 / 5.30, rel_tol=1e-6), \
-        "day before earnings should use prior TTM EPS (5.30)"
-    assert math.isclose(rows[date(2024, 4, 26)], 100.0 / 5.80, rel_tol=1e-6), \
-        "report date should use new TTM EPS (5.80)"
+    assert math.isclose(
+        rows[date(2024, 4, 25)], 100.0 / 5.30, rel_tol=1e-6
+    ), "day before earnings should use prior TTM EPS (5.30)"
+    assert math.isclose(
+        rows[date(2024, 4, 26)], 100.0 / 5.80, rel_tol=1e-6
+    ), "report date should use new TTM EPS (5.80)"
 
 
 def test_pe_null_for_negative_eps(db):
     """Tickers with negative TTM EPS produce NULL P/E, not a meaningless negative value."""
-    insert_earnings(db, [
-        ("LOSS", "2023-03-31", "2023-04-28", -0.5),
-        ("LOSS", "2023-06-30", "2023-07-28", -0.8),
-        ("LOSS", "2023-09-30", "2023-10-27", -0.6),
-        ("LOSS", "2023-12-31", "2024-02-01", -0.9),  # TTM = -2.80 (negative)
-    ])
+    insert_earnings(
+        db,
+        [
+            ("LOSS", "2023-03-31", "2023-04-28", -0.5),
+            ("LOSS", "2023-06-30", "2023-07-28", -0.8),
+            ("LOSS", "2023-09-30", "2023-10-27", -0.6),
+            ("LOSS", "2023-12-31", "2024-02-01", -0.9),  # TTM = -2.80 (negative)
+        ],
+    )
     insert_shares(db, "LOSS", "2024-01-01", 1_000_000)
     insert_prices(db, [("LOSS", "2024-02-02", 20.0)])
 
@@ -200,12 +235,15 @@ def test_pe_null_for_negative_eps(db):
 
 def test_pe_null_for_zero_eps(db):
     """Zero TTM EPS yields NULL P/E (not division-by-zero or inf)."""
-    insert_earnings(db, [
-        ("ZERO", "2023-03-31", "2023-04-28", 0.0),
-        ("ZERO", "2023-06-30", "2023-07-28", 0.0),
-        ("ZERO", "2023-09-30", "2023-10-27", 0.0),
-        ("ZERO", "2023-12-31", "2024-02-01", 0.0),
-    ])
+    insert_earnings(
+        db,
+        [
+            ("ZERO", "2023-03-31", "2023-04-28", 0.0),
+            ("ZERO", "2023-06-30", "2023-07-28", 0.0),
+            ("ZERO", "2023-09-30", "2023-10-27", 0.0),
+            ("ZERO", "2023-12-31", "2024-02-01", 0.0),
+        ],
+    )
     insert_shares(db, "ZERO", "2024-01-01", 1_000_000)
     insert_prices(db, [("ZERO", "2024-02-02", 10.0)])
 
@@ -223,12 +261,15 @@ def test_pe_null_for_zero_eps(db):
 
 def test_ps_trailing(db):
     """P/S = market cap / TTM revenue."""
-    insert_earnings(db, [
-        ("T", "2023-03-31", "2023-04-28", 1.0),
-        ("T", "2023-06-30", "2023-07-28", 1.0),
-        ("T", "2023-09-30", "2023-10-27", 1.0),
-        ("T", "2023-12-31", "2024-02-01", 1.0),
-    ])
+    insert_earnings(
+        db,
+        [
+            ("T", "2023-03-31", "2023-04-28", 1.0),
+            ("T", "2023-06-30", "2023-07-28", 1.0),
+            ("T", "2023-09-30", "2023-10-27", 1.0),
+            ("T", "2023-12-31", "2024-02-01", 1.0),
+        ],
+    )
     insert_income_stmt(db, "T", "2023-03-31", "2023-04-28", 100e9, 20e9)
     insert_income_stmt(db, "T", "2023-06-30", "2023-07-28", 110e9, 22e9)
     insert_income_stmt(db, "T", "2023-09-30", "2023-10-27", 105e9, 21e9)
@@ -274,12 +315,15 @@ def test_ev_ebitda_trailing(db):
     insert_income_stmt(db, "T", "2023-06-30", "2023-07-28", 100e9, 11e9)
     insert_income_stmt(db, "T", "2023-09-30", "2023-10-27", 100e9, 12e9)
     insert_income_stmt(db, "T", "2023-12-31", "2024-02-01", 100e9, 13e9)  # TTM EBITDA = 46e9
-    insert_earnings(db, [
-        ("T", "2023-03-31", "2023-04-28", None),
-        ("T", "2023-06-30", "2023-07-28", None),
-        ("T", "2023-09-30", "2023-10-27", None),
-        ("T", "2023-12-31", "2024-02-01", None),
-    ])
+    insert_earnings(
+        db,
+        [
+            ("T", "2023-03-31", "2023-04-28", None),
+            ("T", "2023-06-30", "2023-07-28", None),
+            ("T", "2023-09-30", "2023-10-27", None),
+            ("T", "2023-12-31", "2024-02-01", None),
+        ],
+    )
     insert_balance_sheet(db, "T", "2023-12-31", "2024-02-01", 50e9, 1_000_000, 20e9, 5e9, 10e9)
     insert_shares(db, "T", "2024-01-01", 1_000_000)
     insert_prices(db, [("T", "2024-02-02", 100.0)])
@@ -305,12 +349,15 @@ def test_fcf_yield(db):
     insert_cashflow(db, "T", "2023-06-30", "2023-07-28", 6e9)
     insert_cashflow(db, "T", "2023-09-30", "2023-10-27", 5e9)
     insert_cashflow(db, "T", "2023-12-31", "2024-02-01", 7e9)  # TTM FCF = 23e9
-    insert_earnings(db, [
-        ("T", "2023-03-31", "2023-04-28", None),
-        ("T", "2023-06-30", "2023-07-28", None),
-        ("T", "2023-09-30", "2023-10-27", None),
-        ("T", "2023-12-31", "2024-02-01", None),
-    ])
+    insert_earnings(
+        db,
+        [
+            ("T", "2023-03-31", "2023-04-28", None),
+            ("T", "2023-06-30", "2023-07-28", None),
+            ("T", "2023-09-30", "2023-10-27", None),
+            ("T", "2023-12-31", "2024-02-01", None),
+        ],
+    )
     insert_shares(db, "T", "2024-01-01", 1_000_000)
     insert_prices(db, [("T", "2024-02-02", 100.0)])
 
@@ -388,7 +435,7 @@ def test_technicals_52w_range(db):
     assert row is not None
     # Only 3 rows — all within the 252-row window
     assert math.isclose(row[0], 150.0)  # high
-    assert math.isclose(row[1], 80.0)   # low
+    assert math.isclose(row[1], 80.0)  # low
 
 
 def test_beta_null_without_spy(db):
@@ -397,11 +444,10 @@ def test_beta_null_without_spy(db):
     for dt, p in prices:
         insert_prices(db, [("T", dt, p)])
 
-    rows = db.execute(
-        "SELECT beta_spy_252d FROM technicals_daily WHERE ticker='T'"
-    ).fetchall()
-    assert all(r[0] is None or math.isnan(r[0]) for r in rows), \
-        "beta should be NULL/NaN when SPY has no price data"
+    rows = db.execute("SELECT beta_spy_252d FROM technicals_daily WHERE ticker='T'").fetchall()
+    assert all(
+        r[0] is None or math.isnan(r[0]) for r in rows
+    ), "beta should be NULL/NaN when SPY has no price data"
 
 
 def test_realized_vol_non_negative(db):
@@ -466,6 +512,7 @@ def test_ingest_universe_uses_table_not_yaml(db, monkeypatch):
 
     with patch("src.ingest.orchestrator.fetch_and_ingest", side_effect=fake_fetch_and_ingest):
         from src.ingest.orchestrator import ingest_universe
+
         ingest_universe(db)
 
     assert "ACTIVE1" in ingested

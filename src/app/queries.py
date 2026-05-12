@@ -138,7 +138,7 @@ SELECT
     p.adjusted_close AS price,
     (p.adjusted_close / NULLIF(p.prev_close, 0) - 1) * 100 AS pct_1d,
     m.mktcap / 1e9   AS mktcap_b,
-    ne.next_period   AS next_earnings
+    ne.next_period   AS next_period_end
 FROM security_master sm
 LEFT JOIN latest_price p ON sm.ticker = p.ticker
 LEFT JOIN latest_mult m  ON sm.ticker = m.ticker
@@ -151,8 +151,17 @@ def ticker_header(con: duckdb.DuckDBPyConnection, ticker: str) -> dict:
     row = con.execute(_TICKER_HEADER_SQL, [ticker] * 5).fetchone()
     if not row:
         return {}
-    cols = ["name", "sector", "industry", "currency", "price_date", "price",
-            "pct_1d", "mktcap_b", "next_earnings"]
+    cols = [
+        "name",
+        "sector",
+        "industry",
+        "currency",
+        "price_date",
+        "price",
+        "pct_1d",
+        "mktcap_b",
+        "next_period_end",
+    ]
     return dict(zip(cols, row, strict=False))
 
 
@@ -160,15 +169,19 @@ def ticker_header(con: duckdb.DuckDBPyConnection, ticker: str) -> dict:
 # Deep Dive — valuation history
 # ---------------------------------------------------------------------------
 
+
 def valuation_history(con: duckdb.DuckDBPyConnection, ticker: str, years: int = 5) -> pd.DataFrame:
-    return con.execute("""
+    return con.execute(
+        """
         SELECT date, pe_trailing, ps_trailing, pb_trailing,
                ev_ebitda_trailing, fcf_yield * 100 AS fcf_yield_pct
         FROM trailing_multiples_daily
         WHERE ticker = ?
           AND date >= CURRENT_DATE - INTERVAL (? * 365) DAY
         ORDER BY date
-    """, [ticker, years]).df()
+    """,
+        [ticker, years],
+    ).df()
 
 
 def valuation_stats(history: pd.DataFrame) -> pd.DataFrame:
@@ -201,8 +214,10 @@ def valuation_stats(history: pd.DataFrame) -> pd.DataFrame:
 # Deep Dive — profitability & growth
 # ---------------------------------------------------------------------------
 
+
 def quarterly_metrics(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 12) -> pd.DataFrame:
-    return con.execute("""
+    return con.execute(
+        """
         SELECT
             stmt.fiscal_period_end,
             stmt.total_revenue / 1e9                                          AS revenue_b,
@@ -219,15 +234,19 @@ def quarterly_metrics(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 12) 
         WHERE stmt.ticker = ? AND stmt.total_revenue IS NOT NULL
         ORDER BY stmt.fiscal_period_end DESC
         LIMIT ?
-    """, [ticker, n]).df()
+    """,
+        [ticker, n],
+    ).df()
 
 
 # ---------------------------------------------------------------------------
 # Deep Dive — analyst view
 # ---------------------------------------------------------------------------
 
+
 def latest_analyst_snapshot(con: duckdb.DuckDBPyConnection, ticker: str) -> dict | None:
-    row = con.execute("""
+    row = con.execute(
+        """
         SELECT snapshot_date, consensus_rating, target_price,
                n_strong_buy, n_buy, n_hold, n_sell, n_strong_sell,
                eps_estimate_curr_y, eps_estimate_next_y
@@ -235,12 +254,23 @@ def latest_analyst_snapshot(con: duckdb.DuckDBPyConnection, ticker: str) -> dict
         WHERE ticker = ?
         ORDER BY snapshot_date DESC
         LIMIT 1
-    """, [ticker]).fetchone()
+    """,
+        [ticker],
+    ).fetchone()
     if not row:
         return None
-    cols = ["snapshot_date", "consensus_rating", "target_price",
-            "n_strong_buy", "n_buy", "n_hold", "n_sell", "n_strong_sell",
-            "eps_est_curr_y", "eps_est_next_y"]
+    cols = [
+        "snapshot_date",
+        "consensus_rating",
+        "target_price",
+        "n_strong_buy",
+        "n_buy",
+        "n_hold",
+        "n_sell",
+        "n_strong_sell",
+        "eps_est_curr_y",
+        "eps_est_next_y",
+    ]
     return dict(zip(cols, row, strict=False))
 
 
@@ -248,8 +278,10 @@ def latest_analyst_snapshot(con: duckdb.DuckDBPyConnection, ticker: str) -> dict
 # Deep Dive — earnings history
 # ---------------------------------------------------------------------------
 
+
 def earnings_history(con: duckdb.DuckDBPyConnection, ticker: str) -> pd.DataFrame:
-    return con.execute("""
+    return con.execute(
+        """
         WITH price_next AS (
             SELECT ticker, date, adjusted_close,
                    LEAD(adjusted_close) OVER (PARTITION BY ticker ORDER BY date) AS next_close
@@ -267,22 +299,28 @@ def earnings_history(con: duckdb.DuckDBPyConnection, ticker: str) -> pd.DataFram
         WHERE ee.ticker = ? AND ee.eps_actual IS NOT NULL
         ORDER BY ee.fiscal_period_end DESC
         LIMIT 16
-    """, [ticker]).df()
+    """,
+        [ticker],
+    ).df()
 
 
 # ---------------------------------------------------------------------------
 # Deep Dive — capital returns
 # ---------------------------------------------------------------------------
 
+
 def latest_dividends(con: duckdb.DuckDBPyConnection, ticker: str) -> dict | None:
-    row = con.execute("""
+    row = con.execute(
+        """
         SELECT forward_annual_dividend_rate, forward_annual_dividend_yield,
                payout_ratio, ex_date, pay_date
         FROM dividends_declared
         WHERE ticker = ?
         ORDER BY ex_date DESC
         LIMIT 1
-    """, [ticker]).fetchone()
+    """,
+        [ticker],
+    ).fetchone()
     if not row:
         return None
     cols = ["fwd_div_rate", "fwd_div_yield", "payout_ratio", "ex_date", "pay_date"]
@@ -290,21 +328,28 @@ def latest_dividends(con: duckdb.DuckDBPyConnection, ticker: str) -> dict | None
 
 
 def dividend_annual_history(con: duckdb.DuckDBPyConnection, ticker: str) -> pd.DataFrame:
-    return con.execute("""
+    return con.execute(
+        """
         SELECT year, count AS n_dividends
         FROM dividends_annual
         WHERE ticker = ?
         ORDER BY year DESC
         LIMIT 10
-    """, [ticker]).df()
+    """,
+        [ticker],
+    ).df()
 
 
 # ---------------------------------------------------------------------------
 # Deep Dive — financial statements
 # ---------------------------------------------------------------------------
 
-def income_statement_history(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 8) -> pd.DataFrame:
-    return con.execute("""
+
+def income_statement_history(
+    con: duckdb.DuckDBPyConnection, ticker: str, n: int = 8
+) -> pd.DataFrame:
+    return con.execute(
+        """
         SELECT fiscal_period_end, total_revenue, gross_profit, ebitda,
                operating_income, net_income, interest_expense,
                research_development
@@ -312,11 +357,14 @@ def income_statement_history(con: duckdb.DuckDBPyConnection, ticker: str, n: int
         WHERE ticker = ?
         ORDER BY fiscal_period_end DESC
         LIMIT ?
-    """, [ticker, n]).df()
+    """,
+        [ticker, n],
+    ).df()
 
 
 def balance_sheet_history(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 8) -> pd.DataFrame:
-    return con.execute("""
+    return con.execute(
+        """
         SELECT fiscal_period_end,
                cash_and_short_term_investments,
                total_current_assets, total_assets,
@@ -329,11 +377,14 @@ def balance_sheet_history(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 
         WHERE ticker = ?
         ORDER BY fiscal_period_end DESC
         LIMIT ?
-    """, [ticker, n]).df()
+    """,
+        [ticker, n],
+    ).df()
 
 
 def cash_flow_history(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 8) -> pd.DataFrame:
-    return con.execute("""
+    return con.execute(
+        """
         SELECT fiscal_period_end,
                total_cash_from_operating_activities, capital_expenditures,
                free_cash_flow, dividends_paid, net_borrowings
@@ -341,12 +392,15 @@ def cash_flow_history(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 8) -
         WHERE ticker = ?
         ORDER BY fiscal_period_end DESC
         LIMIT ?
-    """, [ticker, n]).df()
+    """,
+        [ticker, n],
+    ).df()
 
 
 # ---------------------------------------------------------------------------
 # Universe management
 # ---------------------------------------------------------------------------
+
 
 def universe_management_list(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     return con.execute("""
@@ -365,7 +419,27 @@ def universe_management_list(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
 
 
 def active_tickers(con: duckdb.DuckDBPyConnection) -> list[str]:
-    rows = con.execute(
-        "SELECT ticker FROM universe WHERE active = true ORDER BY ticker"
-    ).fetchall()
+    rows = con.execute("SELECT ticker FROM universe WHERE active = true ORDER BY ticker").fetchall()
     return [r[0] for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 — snapshot coverage
+# ---------------------------------------------------------------------------
+
+
+def snapshot_coverage(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """Days of analyst snapshot history per active ticker."""
+    return con.execute("""
+        SELECT
+            u.ticker,
+            MIN(dfs.snapshot_date)::VARCHAR                              AS first_snapshot,
+            MAX(dfs.snapshot_date)::VARCHAR                              AS last_snapshot,
+            COUNT(DISTINCT dfs.snapshot_date)                            AS n_days,
+            (CURRENT_DATE - MAX(dfs.snapshot_date))                      AS days_since_last
+        FROM universe u
+        LEFT JOIN daily_forward_snapshot dfs ON u.ticker = dfs.ticker
+        WHERE u.active = true
+        GROUP BY u.ticker
+        ORDER BY u.ticker
+    """).df()

@@ -32,19 +32,19 @@ def _universe_summary(_con, mtime: float) -> pd.DataFrame:
 
 def _style_table(df: pd.DataFrame) -> Styler:
     format_map = {
-        "price":           "${:.2f}",
-        "pct_1d":          "{:.2f}%",
-        "mktcap_b":        "${:.1f}B",
-        "pe_trailing":     "{:.1f}",
-        "pe_forward":      "{:.1f}",
-        "ps_trailing":     "{:.1f}",
-        "pb_trailing":     "{:.1f}",
+        "price": "${:.2f}",
+        "pct_1d": "{:.2f}%",
+        "mktcap_b": "${:.1f}B",
+        "pe_trailing": "{:.1f}",
+        "pe_forward": "{:.1f}",
+        "ps_trailing": "{:.1f}",
+        "pb_trailing": "{:.1f}",
         "ev_ebitda_trailing": "{:.1f}",
-        "rev_yoy_pct":     "{:.1f}%",
-        "eps_yoy_pct":     "{:.1f}%",
-        "div_yield_pct":   "{:.2f}%",
+        "rev_yoy_pct": "{:.1f}%",
+        "eps_yoy_pct": "{:.1f}%",
+        "div_yield_pct": "{:.2f}%",
         "consensus_rating": "{:.2f}",
-        "target_price":    "${:.2f}",
+        "target_price": "${:.2f}",
         "target_upside_pct": "{:.1f}%",
     }
 
@@ -82,23 +82,23 @@ def main() -> None:
         return
 
     rename = {
-        "ticker":             "Ticker",
-        "name":               "Name",
-        "sector":             "Sector",
-        "price":              "Price",
-        "pct_1d":             "1D %",
-        "mktcap_b":           "Mkt Cap ($B)",
-        "pe_trailing":        "P/E",
-        "pe_forward":         "Fwd P/E",
-        "ps_trailing":        "P/S",
-        "pb_trailing":        "P/B",
+        "ticker": "Ticker",
+        "name": "Name",
+        "sector": "Sector",
+        "price": "Price",
+        "pct_1d": "1D %",
+        "mktcap_b": "Mkt Cap ($B)",
+        "pe_trailing": "P/E",
+        "pe_forward": "Fwd P/E",
+        "ps_trailing": "P/S",
+        "pb_trailing": "P/B",
         "ev_ebitda_trailing": "EV/EBITDA",
-        "rev_yoy_pct":        "Rev YoY %",
-        "eps_yoy_pct":        "EPS YoY %",
-        "div_yield_pct":      "Div Yield %",
-        "consensus_rating":   "Rating",
-        "target_price":       "Target",
-        "target_upside_pct":  "Upside %",
+        "rev_yoy_pct": "Rev YoY %",
+        "eps_yoy_pct": "EPS YoY %",
+        "div_yield_pct": "Div Yield %",
+        "consensus_rating": "Rating",
+        "target_price": "Target",
+        "target_upside_pct": "Upside %",
     }
     display_df = df.rename(columns=rename)
     display_cols = list(rename.values())
@@ -109,22 +109,25 @@ def main() -> None:
     style = style.set_table_styles([])  # clear defaults so column names render from rename below
 
     # Apply renamed columns for display (re-apply formatting on renamed df)
-    display_format = {rename.get(k, k): v for k, v in {
-        "price":           "${:.2f}",
-        "pct_1d":          "{:.2f}%",
-        "mktcap_b":        "${:.1f}B",
-        "pe_trailing":     "{:.1f}",
-        "pe_forward":      "{:.1f}",
-        "ps_trailing":     "{:.1f}",
-        "pb_trailing":     "{:.1f}",
-        "ev_ebitda_trailing": "{:.1f}",
-        "rev_yoy_pct":     "{:.1f}%",
-        "eps_yoy_pct":     "{:.1f}%",
-        "div_yield_pct":   "{:.2f}%",
-        "consensus_rating": "{:.2f}",
-        "target_price":    "${:.2f}",
-        "target_upside_pct": "{:.1f}%",
-    }.items()}
+    display_format = {
+        rename.get(k, k): v
+        for k, v in {
+            "price": "${:.2f}",
+            "pct_1d": "{:.2f}%",
+            "mktcap_b": "${:.1f}B",
+            "pe_trailing": "{:.1f}",
+            "pe_forward": "{:.1f}",
+            "ps_trailing": "{:.1f}",
+            "pb_trailing": "{:.1f}",
+            "ev_ebitda_trailing": "{:.1f}",
+            "rev_yoy_pct": "{:.1f}%",
+            "eps_yoy_pct": "{:.1f}%",
+            "div_yield_pct": "{:.2f}%",
+            "consensus_rating": "{:.2f}",
+            "target_price": "${:.2f}",
+            "target_upside_pct": "{:.1f}%",
+        }.items()
+    }
 
     display_df_subset = display_df[display_cols]
     display_style = display_df_subset.style.format(display_format, na_rep="—")
@@ -136,15 +139,24 @@ def main() -> None:
         if not display_df_subset[col_disp].notna().any():
             continue
         if col_orig in ("rev_yoy_pct", "eps_yoy_pct", "target_upside_pct", "div_yield_pct"):
-            display_style = display_style.background_gradient(cmap="RdYlGn", subset=[col_disp], axis=0)
-        elif col_orig in ("pe_trailing", "pe_forward", "ps_trailing", "pb_trailing", "ev_ebitda_trailing", "consensus_rating"):
-            display_style = display_style.background_gradient(cmap="RdYlGn_r", subset=[col_disp], axis=0)
+            display_style = display_style.background_gradient(
+                cmap="RdYlGn", subset=[col_disp], axis=0
+            )
+        elif col_orig in (
+            "pe_trailing",
+            "pe_forward",
+            "ps_trailing",
+            "pb_trailing",
+            "ev_ebitda_trailing",
+            "consensus_rating",
+        ):
+            display_style = display_style.background_gradient(
+                cmap="RdYlGn_r", subset=[col_disp], axis=0
+            )
 
-    st.dataframe(display_style, use_container_width=True, hide_index=True)
+    st.dataframe(display_style, width="stretch", hide_index=True)
 
-    st.caption(
-        "Consensus rating: 1 = Strong Buy | 2 = Buy | 3 = Hold | 4 = Sell | 5 = Strong Sell"
-    )
+    st.caption("Consensus rating: 1 = Strong Buy | 2 = Buy | 3 = Hold | 4 = Sell | 5 = Strong Sell")
 
 
 main()

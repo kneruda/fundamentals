@@ -23,6 +23,11 @@ def _universe_list(_con, mtime: float):
     return queries.universe_management_list(_con)
 
 
+@st.cache_data
+def _snapshot_coverage(_con, mtime: float):
+    return queries.snapshot_coverage(_con)
+
+
 def _clear_cache() -> None:
     st.cache_data.clear()
 
@@ -40,9 +45,32 @@ def main() -> None:
     if df.empty:
         st.info("No tickers in universe yet.")
     else:
-        display = df[["ticker", "name", "sector", "added_at", "last_loaded", "active", "notes"]].copy()
+        display = df[
+            ["ticker", "name", "sector", "added_at", "last_loaded", "active", "notes"]
+        ].copy()
         display.columns = ["Ticker", "Name", "Sector", "Added", "Last Loaded", "Active", "Notes"]
-        st.dataframe(display, hide_index=True, use_container_width=True)
+        st.dataframe(display, hide_index=True, width="stretch")
+
+    # ---- Snapshot coverage ----
+    st.subheader("Analyst Snapshot Coverage")
+    st.caption(
+        "Forward analyst data is captured once per day. "
+        "Forward-looking screens require at least 30 days of history."
+    )
+    cov = _snapshot_coverage(con, mtime)
+    if cov.empty:
+        st.info("No active tickers yet.")
+    else:
+        cov_display = cov.rename(
+            columns={
+                "ticker": "Ticker",
+                "first_snapshot": "First Snapshot",
+                "last_snapshot": "Last Snapshot",
+                "n_days": "Days Collected",
+                "days_since_last": "Days Since Last",
+            }
+        )
+        st.dataframe(cov_display, hide_index=True, width="stretch")
 
     # ---- Add ticker form ----
     st.subheader("Add Ticker")
