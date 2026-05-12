@@ -296,7 +296,7 @@ day going forward; gap-detection report on the universe page is clean.
 
 ---
 
-## Phase 7 — Trailing screens
+## Phase 7 — Trailing screens ✓ DONE
 
 **Deliverable**: a Screens page with filters that work without accumulated
 history.
@@ -319,6 +319,50 @@ history.
 
 **Done when**: user can pick a screen, tune thresholds, and see the universe
 filtered live.
+
+## Phase 7 decisions (resolved open questions)
+
+### SQL in `src/screens/trailing.py`, thin wrappers in `queries.py`
+
+Each screen function lives in `src/screens/trailing.py` and returns a
+full-universe DataFrame. Optional filter parameters are keyword-only; unset
+parameters leave the ticker in. `queries.py` exposes thin wrappers
+(`screen_absolute_valuation`, etc.) that page files call — no SQL in pages.
+
+### Fetch-then-filter in Python for optional parameters
+
+Rather than building dynamic SQL WHERE clauses, each screen fetches the full
+active universe from DuckDB and applies Python-side filters for optional
+parameters. The universe is small (~10–100 tickers); this avoids the
+complexity of parameterized optional SQL conditions while keeping queries
+readable.
+
+### `PERCENT_RANK() OVER (PARTITION BY ticker ORDER BY ...)` for relative history
+
+DuckDB's `PERCENT_RANK()` is a window function. Partitioning by ticker and
+ordering by the multiple value produces each row's rank within that ticker's
+own history. The latest row's rank is its current percentile. 0 = historical
+low, 100 = historical high. `min_history_days` parameter gates out tickers
+with too little history (default 252 trading days).
+
+### ROIC formula
+
+`ROIC = TTM operating income / (total_stockholder_equity + long_term_debt_total + short_term_debt)`.
+COALESCE debt components to 0. Only positive invested capital produces a
+meaningful ROIC; NULL otherwise.
+
+### Margin expansion: current quarter vs. 4 quarters prior (YoY)
+
+`require_margin_expansion=True` filters to tickers where the most recent
+quarter's gross margin exceeds the quarter from 4 periods ago. Uses
+`ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY fiscal_period_end DESC)`,
+comparing `rn=1` to `rn=5`.
+
+### FCF conversion = TTM FCF / TTM net income × 100
+
+TTM net income computed inline from `income_statement` (last 4 quarters with
+`net_income IS NOT NULL`). NULL when TTM net income ≤ 0 to avoid negative
+conversion ratios from loss years.
 
 ---
 

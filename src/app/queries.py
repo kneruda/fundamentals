@@ -443,3 +443,44 @@ def snapshot_coverage(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
         GROUP BY u.ticker
         ORDER BY u.ticker
     """).df()
+
+
+# ---------------------------------------------------------------------------
+# Phase 7 — Trailing screens
+# ---------------------------------------------------------------------------
+
+
+def screen_absolute_valuation(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+    from src.screens.trailing import screen_absolute_valuation as _fn
+
+    return _fn(con, **kwargs)
+
+
+def screen_relative_history(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+    from src.screens.trailing import screen_relative_history as _fn
+
+    return _fn(con, **kwargs)
+
+
+def screen_growth(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+    from src.screens.trailing import screen_growth as _fn
+
+    return _fn(con, **kwargs)
+
+
+def screen_quality(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+    from src.screens.trailing import screen_quality as _fn
+
+    return _fn(con, **kwargs)
+
+
+def screen_balance_sheet(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+    from src.screens.trailing import screen_balance_sheet as _fn
+
+    return _fn(con, **kwargs)
+
+
+def screen_income(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+    from src.screens.trailing import screen_income as _fn
+
+    return _fn(con, **kwargs)
