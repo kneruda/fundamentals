@@ -60,7 +60,8 @@ that's the central piece per the ingestion model in AGENTS.md.
 
 - Write DDL for all tables in AGENTS.md's data model, including the
   `universe` table. Every monetary column has a currency. Every UPSERT table
-  has `loaded_at`. Use `DOUBLE` throughout — 15 significant digits is
+  has `loaded_at` (used for recency/change detection, not row-version
+  history). Use `DOUBLE` throughout — 15 significant digits is
   sufficient for all monetary and per-share figures in this project.
 - One migration script (`src/schema/migrations/001_initial.sql`) creates
   everything. Migrations are append-only thereafter.
@@ -98,7 +99,8 @@ that's the central piece per the ingestion model in AGENTS.md.
   - Idempotency: running `ingest_ticker` twice on the same file leaves the
     warehouse identical except for `loaded_at`.
   - Restatement: changing one BS number in the fixture and re-running causes
-    the latest row to win without losing the prior row.
+    the latest row to win via in-place update on the same natural key
+    (row count unchanged).
 
 **Done when**: AAPL fixture loads cleanly into every applicable table; SQL
 spot-check on AAPL fundamentals matches the JSON source; re-running the
@@ -440,8 +442,9 @@ margin, NPL ratios, tier-1 capital; REIT-specific panels for FFO/AFFO).
 ### Other known limitations
 
 - **Restatements**: handled via `loaded_at` but we do not alert when one
-  occurs. A future phase could surface "restated since last load" as a flag
-  on the deep-dive page.
+  occurs. Current design uses in-place updates keyed by natural keys (latest
+  value retained; prior values not kept as separate versions). A future phase
+  could surface "restated since last load" as a flag on the deep-dive page.
 - **Multiple share classes**: GOOG vs. GOOGL are separate tickers in EODHD.
   We do not collapse them. The user is expected to pick the class they want.
 - **Pre-IPO and short-history tickers**: CRWD (2019) and U (2020) have

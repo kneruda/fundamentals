@@ -150,6 +150,11 @@ the rest of the system follows.
 | Price file: `close`, `open`, `high`, `low`, `volume` | `prices_daily` | UPSERT by `(ticker, date)` |
 | Price file: `adjusted_close` | `prices_daily.adjusted_close` | **REPLACE the entire column** for that ticker on each load (see below) |
 
+Restatement semantics for UPSERT tables: re-ingesting a corrected vendor value
+updates the existing natural-key row in place ("latest value wins"). We keep
+`loaded_at` to track recency/change timing, but we do not keep multiple
+versioned rows per natural key in MVP.
+
 ### Adjusted close handling — the one tricky case
 
 The vendor's `adjusted_close` is back-adjusted for **all subsequent** splits
@@ -325,8 +330,9 @@ camelCase vendor names; downstream code reads only snake_case.
   `src/schema/migrations/` with a leading numeric prefix. Never edit a past
   migration.
 - **`loaded_at` everywhere**: every UPSERT-mode table has a `loaded_at` UTC
-  timestamp. Latest-wins by `(natural_key, MAX(loaded_at))`. This is how
-  restatements are detected without losing history.
+  timestamp. UPSERT writes latest values in place on the natural key; we use
+  `loaded_at` to detect recency and potential restatement timing, not to keep
+  versioned history rows.
 - **Decimal handling**: prefer DuckDB `DECIMAL(p,s)` for per-share figures
   where rounding matters; `DOUBLE` is fine for ratios and large aggregates.
 - **Field naming**: camelCase from EODHD → snake_case in DuckDB. The mapping
