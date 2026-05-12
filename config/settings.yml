@@ -1,0 +1,33 @@
+# Non-secret runtime settings. Secrets live in .env.
+
+# --- Storage paths (relative to project root) ---
+paths:
+  warehouse: data/warehouse.duckdb
+  raw_fundamentals: data/raw/fundamentals
+  raw_prices: data/raw/prices
+  archive: data/archive
+
+# --- Reporting ---
+reporting_currency: USD
+
+# --- Vendor (EODHD) client ---
+vendor:
+  base_url: https://eodhd.com/api
+  # Conservative throttle. Tune up after confirming the EODHD plan limits.
+  requests_per_second: 5
+  # Default exchange suffix appended to bare tickers (e.g., "AAPL" -> "AAPL.US")
+  default_exchange: US
+  # Seconds to wait between retries on transient failures (exponential)
+  retry_base_seconds: 1
+  retry_max_attempts: 4
+
+# --- Ingestion behavior ---
+ingest:
+  # Keep dated copies of raw vendor files for audit. Toggle off to save disk.
+  archive_raw_files: true
+  # Days of archive to keep before purging (0 = forever)
+  archive_retention_days: 90
+
+# --- Benchmark for beta and relative comparisons ---
+benchmark:
+  ticker: SPY.US

@@ -1,0 +1,18 @@
+# Initial seed for the universe table. This file is read ONCE at setup time
+# by `scripts/seed_universe.py`; at runtime the source of truth is the
+# `universe` table in the warehouse.
+#
+# To add tickers after setup, use `scripts/add_ticker.py SYMBOL`
+# or the Universe page in the Streamlit app.
+
+tickers:
+  - AAPL    # Apple - dividend payer, mega cap, multi-decade history
+  - MSFT    # Microsoft - dividend payer, mega cap
+  - META    # Meta - recent dividend initiation
+  - DIS     # Disney - dividend payer, media/entertainment
+  - CRWD    # CrowdStrike - cybersecurity, IPO 2019 (short-history test case)
+  - NFLX    # Netflix - no dividend, content
+  - GOOG    # Alphabet Class C - tech mega cap
+  - RBLX    # Roblox - GAAP loss-maker (negative-EPS test case)
+  - U       # Unity - GAAP loss-maker
+  - PANW    # Palo Alto Networks - cybersecurity, IPO 2012

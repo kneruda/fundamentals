@@ -1,0 +1,36 @@
+# --- Secrets ---
+.env
+.env.local
+
+# --- Data (never commit raw vendor files or the warehouse) ---
+data/raw/
+data/archive/
+data/warehouse.duckdb
+data/warehouse.duckdb.wal
+*.duckdb
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.python-version
+
+# --- Tooling ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# --- Streamlit ---
+.streamlit/secrets.toml
