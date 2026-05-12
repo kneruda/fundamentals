@@ -398,13 +398,15 @@ CREATE TABLE IF NOT EXISTS daily_forward_snapshot (
 -- =============================================================================
 -- Analyst estimates history (per future period, snapshotted daily)
 -- =============================================================================
--- One row per (ticker, snapshot_date, future_period). Captures Earnings.Trend
+-- One row per (ticker, snapshot_date, period_end). Captures Earnings.Trend
 -- so we can detect estimate revisions over time.
+-- Note: `period` labels (e.g. "0q", "+1y") repeat across different dates, so
+-- the PK uses period_end (the forecast target date) rather than period.
 CREATE TABLE IF NOT EXISTS analyst_estimates_history (
     ticker                      VARCHAR NOT NULL,
     snapshot_date               DATE NOT NULL,
-    period                      VARCHAR NOT NULL,     -- e.g. "0q", "+1q", "0y", "+1y"
-    period_end                  DATE,
+    period_end                  DATE NOT NULL,
+    period                      VARCHAR,             -- e.g. "0q", "+1q", "0y", "+1y"
     -- Earnings estimates
     eps_avg                     DOUBLE,
     eps_low                     DOUBLE,
@@ -421,7 +423,7 @@ CREATE TABLE IF NOT EXISTS analyst_estimates_history (
     revenue_growth              DOUBLE,
     currency                    VARCHAR,
     loaded_at                   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (ticker, snapshot_date, period)
+    PRIMARY KEY (ticker, snapshot_date, period_end)
 );
 
 
