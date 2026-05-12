@@ -25,6 +25,10 @@ def _run_migrations(con: duckdb.DuckDBPyConnection) -> None:
         if script.stem not in applied:
             for stmt in _split_sql(script.read_text()):
                 con.execute(stmt)
+            con.execute(
+                "INSERT INTO _schema_migrations (version) VALUES (?) ON CONFLICT (version) DO NOTHING",
+                [script.stem],
+            )
 
 
 def _split_sql(sql: str) -> list[str]:

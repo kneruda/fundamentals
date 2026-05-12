@@ -460,8 +460,3 @@ CREATE TABLE IF NOT EXISTS fx_rates_daily (
 );
 
 
--- =============================================================================
--- Mark this migration as applied
--- =============================================================================
-INSERT INTO _schema_migrations (version) VALUES ('001_initial')
-ON CONFLICT (version) DO NOTHING;
