@@ -454,6 +454,19 @@ margin, NPL ratios, tier-1 capital; REIT-specific panels for FFO/AFFO).
 - **Spin-offs and major mergers**: the price series before such events
   reflects the predecessor entity. The vendor's adjusted_close may or may
   not handle this cleanly; cross-check is a manual exercise per case.
+- **`adjusted_close` replacement semantics**: the Phase 2 price ingestion uses
+  `UPSERT` for all price columns including `adjusted_close`. Because we always
+  download the full price history on every load, this is functionally
+  equivalent to the "strict full-column replacement" pattern described in the
+  ingestion model. If the vendor ever truncates or corrects the date range of
+  the returned series, stale rows for removed dates would retain their old
+  `adjusted_close` values. Address this with a DELETE-then-INSERT or
+  DELETE-orphan approach if it ever surfaces in practice.
+- **Vendor client tests use mocks, not VCR cassettes**: Phase 2 retry/error
+  tests use `unittest.mock.patch` on `httpx.get` rather than recorded HTTP
+  fixtures. This is sufficient for testing request construction and retry
+  logic; API contract drift would require a separate acceptance test against
+  the live API or manually recorded cassettes.
 
 ---
 

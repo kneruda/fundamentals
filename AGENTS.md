@@ -205,13 +205,19 @@ warehouse, **not** in `config/universe.yml`. The YAML file exists only as a
 **seed** for initial setup — `scripts/seed_universe.py` reads it and inserts
 rows.
 
-The function `add_ticker(ticker)` in `src/universe.py` does three things in
-one transaction:
+The function `add_ticker(con, ticker, notes=None)` in `src/universe.py` does
+two things:
 
-1. Validates the ticker exists at EODHD (a cheap `fetch_general` call).
-2. Inserts a row into `universe` with `added_at = now()`, `active = true`.
-3. Calls `ingest_ticker(ticker)`, which backfills all historical data
-   (statements, earnings events, dividends, price history, etc.).
+1. Calls `fetch_and_ingest(con, ticker)` to validate the ticker against EODHD
+   and backfill all historical data (statements, earnings events, dividends,
+   price history, etc.). If EODHD rejects the ticker, this raises and the
+   universe row is never written.
+2. Upserts a row into `universe` with `added_at = now()`, `active = true`.
+
+The canonical ticker argument passed to `add_ticker` (e.g. `7203.TSE`) is
+preserved as the warehouse key — it is **not** replaced by `General.Code` from
+the vendor response (which for non-US symbols is the bare symbol without the
+exchange suffix).
 
 The newly-added ticker has every panel populated immediately **except** the
 analyst-revision screens (Phase 8), which depend on accumulated daily

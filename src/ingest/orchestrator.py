@@ -40,13 +40,16 @@ def ingest_ticker(
     con: duckdb.DuckDBPyConnection,
     fundamentals_path: str | Path,
     prices_path: str | Path | None = None,
+    *,
+    ticker: str | None = None,
 ) -> None:
     """Parse fundamentals JSON (and optionally prices JSON) and load all sections."""
     path = Path(fundamentals_path)
     with path.open() as f:
         data = json.load(f)
 
-    ticker = data.get("General", {}).get("Code") or path.stem
+    if ticker is None:
+        ticker = data.get("General", {}).get("Code") or path.stem
 
     if prices_path is not None:
         with Path(prices_path).open() as f:
@@ -96,7 +99,7 @@ def fetch_and_ingest(con: duckdb.DuckDBPyConnection, ticker: str) -> None:
         shutil.copy2(fund_path, arch / f"{ticker}-fundamentals.json")
         shutil.copy2(price_path, arch / f"{ticker}-prices.json")
 
-    ingest_ticker(con, fund_path, price_path)
+    ingest_ticker(con, fund_path, price_path, ticker=ticker)
 
 
 def ingest_universe(con: duckdb.DuckDBPyConnection) -> None:
