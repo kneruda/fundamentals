@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+    environment:
+      - WAREHOUSE_PATH=/app/data/warehouse.duckdb
+
+  streamlit:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+    environment:
+      - WAREHOUSE_PATH=/app/data/warehouse.duckdb
+    command: uv run streamlit run src/app/Home.py --server.address=0.0.0.0

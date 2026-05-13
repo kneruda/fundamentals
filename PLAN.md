@@ -26,189 +26,39 @@ of truth is the `universe` table.
 
 **Out of MVP**: forward-looking screens (need ≥30 days of accumulated
 snapshots), sector aggregates, calendar/events page, full FX activation
-(designed-in but not loaded until Phase 8).
+(designed-in but not loaded until later).
 
 ---
 
-## Phase 0 — Project setup
+## Phase 0 — Project setup ✓ DONE
 
-**Deliverable**: empty project that installs, lints, tests, and runs end-to-end.
-
-- Initialize repo with the layout in AGENTS.md.
-- Set up `pyproject.toml` with Python 3.11+; pin DuckDB, pandas, polars,
-  Streamlit, httpx, python-dotenv, PyYAML, pytest, ruff, black.
-- Create `.env.example` documenting `EODHD_API_TOKEN`. Add `.env` to
-  `.gitignore`.
-- Create `config/universe.yml` with the 10 seed tickers above.
-- Create `config/settings.yml` with data paths, `reporting_currency: USD`,
-  and `archive_raw_files: true`.
-- Write a `README.md` quickstart pointing at the commands in AGENTS.md.
-- One smoke test (`tests/test_smoke.py`) that imports the top-level package.
-
-**Done when**: `uv sync && uv run pytest` passes; `uv run ruff check .` is
-clean; `git log` has a single setup commit.
+(Setup details unchanged from original plan; see git history.)
 
 ---
 
-## Phase 1 — Schema and section parsers
+## Phase 1 — Schema and section parsers ✓ DONE
 
-**Deliverable**: DuckDB warehouse populated for the seed universe from local
-fixture files (no live vendor fetch yet).
-
-The hard work of this phase is the **parser/writer per JSON section**, since
-that's the central piece per the ingestion model in AGENTS.md.
-
-- Write DDL for all tables in AGENTS.md's data model, including the
-  `universe` table. Every monetary column has a currency. Every UPSERT table
-  has `loaded_at` (used for recency/change detection, not row-version
-  history). Use `DOUBLE` throughout — 15 significant digits is
-  sufficient for all monetary and per-share figures in this project.
-- One migration script (`src/schema/migrations/001_initial.sql`) creates
-  everything. Migrations are append-only thereafter.
-- Build a small migration runner that reads the `_schema_migrations` table
-  and applies any new scripts in order. Idempotent (re-running does nothing
-  if all migrations are present).
-- Implement one module per section in `src/ingest/sections/`:
-  - `general.py` — maps `General.*` → `security_master`
-  - `financials.py` — maps `Financials.{Balance_Sheet, Income_Statement,
-    Cash_Flow}.quarterly` → respective tables; uses `filing_date` as
-    `report_date`; normalizes camelCase → snake_case (note two vendor
-    typos: `capitalSurpluse` → `capital_surplus`, `nonCurrrentAssetsOther`
-    → `non_current_assets_other`)
-  - `earnings.py` — maps `Earnings.History` → `earnings_events`
-  - `shares.py` — maps `outstandingShares.quarterly` → `shares_outstanding`
-  - `dividends.py` — maps `SplitsDividends.*` to `dividends_declared`,
-    `dividends_annual`, `splits`
-  - `analyst_snapshot.py` — maps `AnalystRatings.*` +
-    `Highlights.EPSEstimate*` → `daily_forward_snapshot`, and
-    `Earnings.Trend` → `analyst_estimates_history`
-  - `prices.py` — placeholder; full price ingestion lands in Phase 2
-- `src/ingest/orchestrator.py`: `ingest_ticker(con, fundamentals_path)` that
-  opens the file and dispatches to each section, catching per-section
-  errors and logging them.
-- Drop the AAPL fixture files into `tests/fixtures/` and run ingest against
-  them.
-- Tests:
-  - End-to-end parse of `AAPL-WithFinancials.json` producing populated rows
-    in every target table.
-  - Targeted unit tests for tricky fields: null EPS actuals, string-encoded
-    decimals in `Earnings.Trend` (e.g., `"0.0944"`), fiscal-quarter labels
-    (`"2025-Q4"`), missing optional fields, BS fields that come back null
-    for non-applicable line items (e.g., `intangibleAssets` on financials
-    companies).
-  - Idempotency: running `ingest_ticker` twice on the same file leaves the
-    warehouse identical except for `loaded_at`.
-  - Restatement: changing one BS number in the fixture and re-running causes
-    the latest row to win via in-place update on the same natural key
-    (row count unchanged).
-
-**Done when**: AAPL fixture loads cleanly into every applicable table; SQL
-spot-check on AAPL fundamentals matches the JSON source; re-running the
-loader leaves row counts unchanged.
+(Details unchanged; see git history. Note: the financials section parser
+currently ingests `Financials.*.quarterly` only. Annual ingestion is added in
+Phase 11.)
 
 ---
 
-## Phase 2 — Vendor client + price ingestion
+## Phase 2 — Vendor client + price ingestion ✓ DONE
 
-**Deliverable**: live ingestion from EODHD for an arbitrary ticker, including
-price history with correct `adjusted_close` handling.
-
-- `src/ingest/fetch.py`: EODHD API client. Reads `EODHD_API_TOKEN` from env.
-  Rate-limited (respect EODHD's per-minute caps; see vendor docs for current
-  limits), retries with backoff, returns raw JSON. Two functions:
-  `fetch_fundamentals(ticker)` and `fetch_prices(ticker)`.
-- `prices.py` section module (full implementation):
-  - UPSERT raw OHLCV by `(ticker, date)`.
-  - **REPLACE** the `adjusted_close` column for the entire ticker's history
-    on each load — implemented as a single transaction. The cleanest pattern
-    is a temp staging table + `UPDATE ... FROM staging` keyed on date.
-- `src/ingest/orchestrator.py`: extend `ingest_ticker(ticker)` so it fetches
-  both files (or reads from disk if already fetched today), optionally
-  archives them to `data/archive/<date>/`, and dispatches to all section
-  modules including `prices.py`.
-- `scripts/load_daily.py`: skeleton orchestrator that iterates over the
-  active universe and calls `ingest_ticker` for each. Per-ticker failures
-  logged, not fatal.
-- Tests:
-  - Vendor client tested against recorded HTTP responses (vcr.py or similar)
-    so tests don't hit the live API.
-  - Adjusted-close replacement: starting with a warehouse holding obsolete
-    `adjusted_close` values, running the loader leaves the column equal to
-    the source file values for every date.
-  - Idempotency on prices: re-running the loader does not change row counts.
-
-**Done when**: running `ingest_ticker("AAPL")` against the live EODHD API
-fully populates AAPL's data including 45 years of price history with correct
-adjusted closes.
+(Details unchanged; see git history.)
 
 ---
 
-## Phase 3 — Universe management (CLI)
+## Phase 3 — Universe management (CLI) ✓ DONE
 
-**Deliverable**: a working `add_ticker(ticker)` flow exposed as a CLI; the
-universe table is the runtime source of truth.
-
-- `src/universe.py`:
-  - `add_ticker(ticker, notes=None)` — validates via a cheap EODHD call,
-    inserts a row into `universe`, then calls `ingest_ticker(ticker)` to
-    backfill all historical data. Idempotent: re-adding a ticker that
-    already exists in `universe` re-runs the ingest but doesn't duplicate.
-  - `remove_ticker(ticker)` — soft delete: sets `active = false`. Does not
-    drop warehouse data.
-  - `list_universe(active_only=True)` — returns DataFrame.
-- `scripts/seed_universe.py` — reads `config/universe.yml` and calls
-  `add_ticker` for each entry not already in the table. Designed to be run
-  once at setup.
-- `scripts/add_ticker.py` — `python scripts/add_ticker.py SHOP` style CLI.
-- `scripts/load_daily.py` (extended): now reads the active universe from the
-  table, not from YAML.
-- Tests:
-  - `add_ticker` for an invalid ticker (`add_ticker("FAKE")`) raises a clear
-    error and leaves the warehouse untouched.
-  - `add_ticker` for a valid ticker leaves the warehouse fully populated.
-  - `remove_ticker` then `add_ticker` round-trips: the ticker is `active =
-    true` again, history preserved.
-  - Seed script is idempotent.
-
-**Done when**: `uv run python scripts/seed_universe.py` populates the 10 MVP
-tickers with full historical data; `uv run python scripts/add_ticker.py
-SHOP` adds an 11th ticker and backfills it in a single command.
+(Details unchanged; see git history.)
 
 ---
 
 ## Phase 4 — Computed multiples and technicals ✓ DONE
 
-**Deliverable**: every (ticker, date) has correct trailing multiples and
-technicals computable.
-
-- TTM aggregation views (`src/compute/ttm.py` creating `ttm_eps`,
-  `ttm_revenue`, `ttm_ebitda`) using `report_date` as the becomes-known
-  timestamp from `earnings_events`.
-- `trailing_multiples_daily` materialized view: P/E (price ÷ TTM EPS), P/S
-  (mkt cap ÷ TTM revenue), P/B (price ÷ book value per share from
-  `balance_sheet`), EV/EBITDA (EV computed from mkt cap + net debt), FCF
-  yield (`freeCashFlow` from cash flow ÷ mkt cap).
-- Mkt cap uses `adjusted_close × current_shares_outstanding` for consistency
-  with adjusted EPS. (See AGENTS.md sample query pattern.)
-- `technicals_daily` view: 20/50/200-day MA, 52-week high/low, realized
-  volatility (rolling 60-day stdev × √252), beta vs. SPY (rolling 252-day
-  regression). SPY price history is loaded via a "benchmark" entry in the
-  universe or a separate `benchmarks_daily` table — decide in this phase.
-- Point-in-time integrity tests (these are the most important tests in the
-  whole project):
-  - Trailing P/E on the day **before** an earnings report uses the **prior**
-    quarter's TTM EPS.
-  - Trailing P/E on the report date itself uses the **new** TTM EPS.
-  - Negative-EPS tickers (RBLX, U) produce NULL P/E, not a divide-by-zero
-    or a misleading negative multiple — this is a real test case from the
-    MVP universe.
-  - A multiple computed across AAPL's 2020-08-31 split shows no
-    discontinuity (price and EPS both split-adjusted).
-
-**Done when**: AAPL trailing P/E over 5 years matches public sources within
-~1%; RBLX shows NULL P/E for all dates it had GAAP losses.
-
-**Implementation notes (from Phase 4 review)**:
+**Implementation notes**:
 - TTM revenue, EBITDA, and FCF views were initially using the statement
   table's own `report_date`; corrected to join `earnings_events` on
   `(ticker, fiscal_period_end)` so all TTM views share one timing source.
@@ -219,387 +69,546 @@ technicals computable.
 
 ## Phase 5 — MVP UI ✓ DONE
 
-**Deliverable**: a working Streamlit dashboard with three pages.
-
-- `src/app/Home.py`: the **universe table**. Sortable and filterable. Pulls
-  from `universe` (active only by default). Columns: ticker, name, sector,
-  market cap, price, 1D %, trailing P/E, forward P/E, P/S, P/B, EV/EBITDA,
-  dividend yield, EPS YoY, revenue YoY, consensus rating, target upside %.
-  Conditional formatting (heatmap) on multiples and yield.
-- `src/app/pages/1_Deep_Dive.py`: ticker selector + panels:
-  - **Header**: name, ticker, sector, price, day change, market cap, next
-    earnings date.
-  - **Valuation history**: trailing P/E, P/S, P/B, EV/EBITDA over 1/3/5y
-    with current vs. own median and percentile.
-  - **Profitability & growth**: quarterly bars of revenue, margins, ROE,
-    with YoY growth labels.
-  - **Analyst view**: rating distribution, consensus dial, target with
-    upside %.
-  - **Earnings reaction**: historical surprise % alongside next-day price
-    response per event.
-  - **Capital returns**: forward dividend rate, yield, payout, DPS history.
-  - **Financial statements**: IS / BS / CF quarterly with computed ratios
-    (FCF, FCF margin, net debt, debt/equity, current ratio, interest
-    coverage, ROIC).
-- `src/app/pages/2_Universe.py`: **universe management**. Lists current
-  universe (ticker, name, sector, added_at, last loaded_at, active flag).
-  Form: "Add ticker" text input + button → calls `universe.add_ticker()`
-  with a Streamlit spinner; success/failure toast. Each row has a "remove"
-  button (soft delete) and a "refresh" button (re-run ingest for that
-  ticker).
-- All data reads go through a thin `src/app/queries.py` layer — **no raw
-  SQL in page files**.
-- Caching via `st.cache_data` keyed on `(ticker, warehouse_mtime)`.
-
-**Done when**: user can open the app, browse the universe, click into a
-ticker, see all panels populated, and add a new ticker through the UI in
-under 30 seconds (including the backfill).
-
 **Implementation notes**:
 - `valuation_stats` (current vs. own median and percentile) is implemented
-  as a Python function in `queries.py` operating on a fetched DataFrame,
-  not SQL. DuckDB does not support `PERCENT_RANK() WITHIN GROUP` syntax.
+  as a Python function in `queries.py` operating on a fetched DataFrame.
 - `pandas.Styler.background_gradient` requires `matplotlib`; added to deps.
-- `pd.DataFrame.applymap()` removed in pandas 2.1 — use `.map()`.
 - `load_dotenv()` must be called in Streamlit page files that trigger EODHD
-  API calls; Streamlit doesn't inherit shell env vars reliably.
+  API calls.
 
 ---
 
 ## Phase 6 — Daily forward snapshot ✓ DONE
 
-**Deliverable**: append-only collection of analyst expectations, running
-routinely.
-
-The schema and the section module already exist from Phase 1. This phase
-wires up the daily routine and adds monitoring.
-
-- Confirm `analyst_snapshot.py` correctly appends one
-  `daily_forward_snapshot` row plus one `analyst_estimates_history` row per
-  future period per snapshot day.
-- Idempotency on the snapshot tables: re-running `load_daily.py` on the same
-  calendar day overwrites that day's rows (via natural key
-  `(ticker, snapshot_date)`), never duplicates.
-- Add a "snapshot coverage" view on the Universe management page: how many
-  days back does each ticker have analyst data? Helps detect ingestion gaps
-  early.
-- Cron / scheduling: document how to schedule `load_daily.py` (cron on
-  Linux/macOS, Task Scheduler on Windows). Run after US market close
-  (~17:00 ET).
-- Tests:
-  - Schema enforcement: missing analyst data results in a row with NULLs,
-    not a failure.
-  - Idempotency on same-day re-runs.
-
-**Done when**: snapshot tables accumulate one row per ticker per calendar
-day going forward; gap-detection report on the universe page is clean.
+**Implementation notes**:
+- `next_period_end` replaces `next_earnings` on the Deep Dive header.
+- Streamlit width API: `width="stretch"` replaces deprecated
+  `use_container_width=True`.
+- EODHD error responses validated at the fetch layer; warehouse path
+  centralized in `src/schema/runner.py`.
 
 ---
 
 ## Phase 7 — Trailing screens ✓ DONE
 
-**Deliverable**: a Screens page with filters that work without accumulated
-history.
-
-- `src/app/pages/3_Screens.py`: screen selector + parameter inputs.
-- Implement, each as a parameterized function in `src/screens/`:
-  - **Absolute valuation**: cheap on P/E, P/B, EV/EBITDA, FCF yield.
-  - **Relative-to-own-history**: current multiple vs. own 3y/5y median as a
-    percentile or z-score. (This screen exists because of the unlimited
-    price history — it's a key MVP differentiator.)
-  - **Growth**: Rev/EPS YoY thresholds + acceleration (last 4 quarters of
-    YoY growth strictly increasing).
-  - **Quality**: ROE, ROIC, margin expansion, FCF conversion > 80%.
-  - **Balance sheet strength**: net debt/EBITDA, interest coverage, current
-    ratio.
-  - **Income**: yield + payout ratio cap + N-year dividend history from
-    `dividends_annual`.
-- Tests: each screen runs on the MVP universe fixture without error;
-  spot-check the math on one criterion per screen.
-
-**Done when**: user can pick a screen, tune thresholds, and see the universe
-filtered live.
-
-## Phase 7 decisions (resolved open questions)
-
-### SQL in `src/screens/trailing.py`, thin wrappers in `queries.py`
-
-Each screen function lives in `src/screens/trailing.py` and returns a
-full-universe DataFrame. Optional filter parameters are keyword-only; unset
-parameters leave the ticker in. `queries.py` exposes thin wrappers
-(`screen_absolute_valuation`, etc.) that page files call — no SQL in pages.
-
-### Fetch-then-filter in Python for optional parameters
-
-Rather than building dynamic SQL WHERE clauses, each screen fetches the full
-active universe from DuckDB and applies Python-side filters for optional
-parameters. The universe is small (~10–100 tickers); this avoids the
-complexity of parameterized optional SQL conditions while keeping queries
-readable.
-
-### `PERCENT_RANK() OVER (PARTITION BY ticker ORDER BY ...)` for relative history
-
-DuckDB's `PERCENT_RANK()` is a window function. Partitioning by ticker and
-ordering by the multiple value produces each row's rank within that ticker's
-own history. The latest row's rank is its current percentile. 0 = historical
-low, 100 = historical high. `min_history_days` parameter gates out tickers
-with too little history (default 252 trading days).
-
-### ROIC formula
-
-`ROIC = TTM operating income / (total_stockholder_equity + long_term_debt_total + short_term_debt)`.
-COALESCE debt components to 0. Only positive invested capital produces a
-meaningful ROIC; NULL otherwise.
-
-### Margin expansion: current quarter vs. 4 quarters prior (YoY)
-
-`require_margin_expansion=True` filters to tickers where the most recent
-quarter's gross margin exceeds the quarter from 4 periods ago. Uses
-`ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY fiscal_period_end DESC)`,
-comparing `rn=1` to `rn=5`.
-
-### FCF conversion = TTM FCF / TTM net income × 100
-
-TTM net income computed inline from `income_statement` (last 4 quarters with
-`net_income IS NOT NULL`). NULL when TTM net income ≤ 0 to avoid negative
-conversion ratios from loss years.
+(Phase 7 decisions retained from original plan: SQL in `src/screens/trailing.py`,
+fetch-then-filter in Python for optional parameters, `PERCENT_RANK() OVER
+(PARTITION BY ticker ORDER BY ...)` for relative history, ROIC formula and
+margin-expansion / FCF-conversion definitions as previously documented.)
 
 ---
 
-## Phase 8 — Sector view + bulk ticker upload
+## Phase 8 — Sector view + bulk ticker upload ✓ DONE
 
-**Deliverable**: sector aggregate page with drill-down, plus a bulk import
-flow so users can add many tickers at once.
-
-### Sector view
-
-- `src/app/pages/3_Sectors.py`: group by GIC sector and sub-industry from
-  `security_master`. Show median trailing multiples, growth rates, margins,
-  and dividend yield for each sector / sub-industry. Clicking a sector row
-  expands to show constituent tickers with their individual values.
-- Screen queries live in `src/screens/sectors.py`; the page imports them via
-  `queries.py` — no raw SQL in page files.
-- Tests: query runs on the MVP universe fixture without error; median P/E for
-  a sector matches a hand-computed value.
-
-**Done when**: useful as a starting point for "where are the cheap sectors
-right now?".
-
-### Bulk ticker upload
-
-Add a bulk-add flow to the Universe management page
-(`src/app/pages/2_Universe.py`):
-
-- **Textarea input**: user pastes a list of tickers, one per line.
-- **File uploader**: accepts a plain-text `.txt` file with one ticker per
-  line.
-- Lines starting with `#` and blank/whitespace-only lines are ignored —
-  allows commented-out tickers in a file.
-- For US equities, the exchange suffix is optional: `AAPL` is treated
-  identically to `AAPL.US` because the fetch layer appends `.US`
-  automatically for bare tickers. Non-US tickers require the full vendor
-  format (`7203.TSE`, `SHOP.TO`, etc.).
-- A progress area shows the result (added / already present / failed) for
-  each ticker as the batch runs. One ticker failing does not abort the rest.
-- `bulk_add_tickers(con, tickers)` in `src/universe.py` calls
-  `add_ticker()` for each and returns `list[tuple[str, bool, str]]`
-  (ticker, ok, message). The UI calls this and renders the results table.
-- Tests:
-  - Parse: whitespace-only lines and comment lines are stripped; bare
-    tickers pass through unchanged.
-  - Mixed success/failure batch: one invalid ticker is reported as failed,
-    the rest succeed; no partial-ingest universe rows left behind.
-  - Idempotency: bulk-adding a ticker already in the universe re-runs ingest
-    but does not duplicate the universe row.
-
-**Done when**: user can paste `AAPL\nMSFT\nGOOG` into the textarea and have
-all three added in one action; uploading a `.txt` file produces the same
-result.
+(Sector aggregates page implemented; bulk-add textarea and `.txt` file upload
+implemented in `src/app/pages/2_Universe.py` calling `bulk_add_tickers`.)
 
 ---
 
-## Phase 9 — UI improvements
+## Phase 9 — Operational hardening, Docker, and bulk universe load ✓ DONE
 
-**Deliverable**: quality-of-life enhancements to the dashboard. This phase
-is intentionally open-ended — each item should be small and independently
-testable.
+**Deliverable**: a containerized, rate-limited, resumable bulk loader; a
+scheduled daily refresh running on local cron; the production universe
+(500+ tickers) fully loaded; per-ticker load monitoring visible in the UI.
 
-### Price history date range in Universe view
+This phase makes the system usable at scale. The existing bulk-add and daily
+load work for 10 tickers but will break or timeout silently at 500. Fix that,
+then load the real universe.
 
-Add `price_start` and `price_end` columns to the Universe management table
-(`src/app/pages/2_Universe.py`) showing the earliest and latest date in
-`prices_daily` for each ticker. These come from a new query in `queries.py`:
+### Shared ticker-input parser
 
-```python
-def universe_price_dates(con) -> pd.DataFrame:
-    # Returns ticker, price_start (MIN date), price_end (MAX date)
+The current bulk-add parser lives inline in `2_Universe.py`. Extract to
+`src/ticker_input.py` as a pure function: `parse_ticker_input(raw_text: str)
+-> list[str]`. Handles textarea pastes and file content uniformly: strips
+whitespace-only lines, ignores `#`-prefixed lines, returns canonicalized
+ticker strings. Reused in Phase 10 for watchlist creation from file.
+
+### Rate-limited, resumable bulk loader
+
+- New module `src/ingest/bulk.py` wrapping `add_ticker` for batch use.
+- Throttling: configurable requests-per-minute and requests-per-day in
+  `config/settings.yml` under `eodhd.rate_limit`. Default conservative (e.g.,
+  20 RPM) until the user's tier is confirmed.
+- Retry with exponential backoff on HTTP 5xx and connection errors; surface
+  EODHD's 200-with-Error responses as terminal (no retry).
+- Checkpointing: a `bulk_load_jobs` table tracks in-progress batches with
+  per-ticker status (`pending` / `ok` / `failed`). Resume reads pending rows
+  and continues. Restart-safe by design.
+- CLI: `uv run python scripts/bulk_load.py --file tickers.txt` and
+  `--resume <job_id>`.
+
+### Per-ticker load monitoring
+
+- New table `load_runs`: one row per (ticker, run_started_at) with status,
+  duration_ms, error_message. Populated from both `load_daily.py` and
+  `bulk_load.py` via a shared decorator/helper.
+- Universe management page (`src/app/pages/2_Universe.py`) gains two
+  columns:
+  - **Last load**: timestamp of most recent successful load
+  - **Status**: `ok` / `failed (<error>)` / `stale (>2 days)`
+- Also adds **price start** and **price end** columns (the small item from
+  the original Phase 9), since price-date visibility is part of "monitoring."
+
+### Docker
+
+- `Dockerfile`: Python 3.11-slim base, installs `uv`, copies repo, no
+  entrypoint (commands supplied at run-time).
+- `docker-compose.yml`: two services.
+  - `app`: one-shot service for ingest scripts. `docker compose run --rm app
+    uv run python scripts/load_daily.py`
+  - `streamlit`: long-running UI service on port 8501.
+  - Both mount `./data:/app/data` and `./.env:/app/.env:ro`.
+- `Makefile` (or `scripts/docker-helpers.sh`) with shortcuts: `make load`,
+  `make ui`, `make shell`.
+
+### DuckDB concurrency
+
+DuckDB allows one writer at a time. If Streamlit holds the warehouse open
+while `load_daily.py` runs, the load fails. Two options:
+
+1. **Schedule loads outside UI hours** (cron at 02:00 local). Simplest;
+   ship this as default.
+2. **Streamlit opens read-only**, reconnects on each request. Cleaner but
+   more changes. Defer unless option 1 proves painful.
+
+Phase 9 ships option 1. Document the constraint in `AGENTS.md`.
+
+### Local cron
+
+- Sample crontab snippet committed to `scripts/cron.example`:
+  ```
+  0 2 * * 1-5 cd /path/to/project && docker compose run --rm app \
+      uv run python scripts/load_daily.py >> data/logs/cron.log 2>&1
+  ```
+- Documented in README.
+
+### EC2 readiness (preparation, not deployment)
+
+- Confirm the Docker setup runs cleanly with only `.env` + `data/` mounted
+  (no other host-specific paths).
+- README section: "deploying to EC2" — points to the same `docker compose`
+  setup, plus notes on EBS volume for `data/` and `systemd` timers as a
+  cron alternative.
+- Actual EC2 deployment is post-MVP.
+
+### Bulk-load the production universe
+
+End-of-phase deliverable: the user supplies a `.txt` file of 500+ tickers,
+runs `scripts/bulk_load.py --file <file>`, and walks away. The job
+completes (over hours, given rate limits), the universe table fills, and
+the daily refresh starts accumulating snapshots from day 1.
+
+### Tests
+
+- `parse_ticker_input` handles textarea, file content, comments, blanks
+  identically.
+- Rate limiter respects configured RPM under load.
+- Checkpoint resume: kill a bulk load mid-run, restart with `--resume
+  <job_id>`, all remaining tickers complete; no duplicates in `universe`.
+- `load_runs` table populated by both `load_daily.py` and `bulk_load.py`.
+- Universe page shows last-load and price-range columns correctly.
+- Docker: `docker compose run --rm app uv run pytest` passes.
+
+**Done when**: the production universe is loaded; the daily refresh runs on
+cron via Docker; the Universe page surfaces load status for every ticker.
+
+---
+
+## Phase 10 — Watchlists and portfolios (schema)
+
+**Deliverable**: users can group subsets of the universe into named
+watchlists, optionally attach share counts (portfolio mode), select an
+active watchlist that scopes screen displays — while keeping all
+median/percentile/comparison calculations on the full universe.
+
+### Schema
+
+```sql
+CREATE TABLE watchlist (
+    watchlist_id INTEGER PRIMARY KEY,
+    name VARCHAR UNIQUE NOT NULL,
+    description VARCHAR,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE watchlist_membership (
+    watchlist_id INTEGER REFERENCES watchlist(watchlist_id) ON DELETE CASCADE,
+    ticker VARCHAR REFERENCES universe(ticker),
+    shares DOUBLE,            -- nullable; for portfolio mode (Phase 10.5+)
+    cost_basis DOUBLE,        -- nullable; per share (Phase 10.5+)
+    notes VARCHAR,
+    added_at TIMESTAMP DEFAULT now(),
+    PRIMARY KEY (watchlist_id, ticker)
+);
 ```
 
-The Universe management table is extended with these columns so gaps or
-stale feeds are visible at a glance without querying DuckDB directly.
+`shares` and `cost_basis` are present from day 1 but unused by Phase 10 UI.
+Portfolio calculations (current value, weights, gain/loss, tax lots) come
+in a later sub-phase or as Jira items. The schema is laid down now so we
+don't migrate later.
 
-Tests:
-- `universe_price_dates` returns the correct min/max for a loaded fixture.
-- Tickers with no price rows show `NULL` / `None` for both columns, not an
-  error.
+### Snapshot semantics (resolved)
 
-### Additional items
+Watchlists are **snapshots**: when created, the membership ticker list is
+materialized into `watchlist_membership` and does not auto-update. To get
+updated members from a filter, the user re-saves.
 
-Leave room here for future UI improvements. Each new item gets a subsection
-with a description and acceptance criteria before implementation begins.
+### Functionality
 
-**Done when**: Universe management page shows price start/end dates for all
-active tickers, populated after a standard ingest.
+- `src/watchlist.py`:
+  - `create_watchlist(con, name, tickers, description=None)`
+  - `delete_watchlist(con, name_or_id)`
+  - `rename_watchlist(con, old_name, new_name)`
+  - `list_watchlists(con)`
+  - `get_membership(con, watchlist_id_or_name) -> list[str]`
+- File upload for watchlist creation uses `src/ticker_input.py` from Phase
+  9 — identical semantics to bulk universe upload.
+- New page `src/app/pages/4_Watchlists.py`:
+  - List existing watchlists with member count, created date, delete button.
+  - Create form: name + (paste tickers / upload file).
+  - Single-watchlist view: shows current members with values.
+- "Save current view as watchlist" button on every screen page and on the
+  sector view. Captures the currently-filtered ticker list with a single
+  click; user names it on save.
+- Active-watchlist selector: a sidebar widget (`st.selectbox` in
+  `src/app/Home.py` sidebar) with persistent state via `st.session_state`.
+  Defaults to "Full universe."
+
+### Screen refactor: display set vs. comparison set
+
+The critical invariant: medians, percentiles, sector aggregates, and any
+distribution-based calculation use the **comparison set** (full active
+universe). The **display set** (active watchlist or full universe) only
+filters which rows the user sees.
+
+- `queries.py` functions that compute medians/percentiles take an explicit
+  `comparison_set: list[str] | None = None` argument (None = full active
+  universe). They take a separate `display_filter: list[str] | None`.
+- All page files pass `display_filter = active_watchlist_members or None`
+  and leave `comparison_set` at its default.
+- Sector view: filters displayed tickers by watchlist but computes
+  per-sector medians over the full universe.
+
+### Country-scoped comparisons (future preparation, not built)
+
+When non-US tickers are added (Phase 14 FX activation), users may want to
+compare a Japanese tech name against Japanese tech medians rather than the
+global universe. `security_master` already stores country, so no schema
+change needed. Comparison-set construction will be parameterized in a
+future Jira item; for now, comparison set = full active universe.
+
+### Tests
+
+- Watchlist CRUD round-trips.
+- File-upload watchlist creation uses the same parser as bulk universe
+  upload (regression test: identical input produces identical ticker list).
+- "Save current screen as watchlist" captures exactly the displayed
+  tickers.
+- Delete cascades: removing a watchlist removes its membership rows.
+- Screen behavior with active watchlist: display set is filtered;
+  medians/percentiles are unchanged from the full-universe case.
+- Sector view: per-sector medians identical before and after watchlist
+  selection; only the visible constituents change.
+
+**Done when**: user can create, populate (typed/uploaded), and delete
+watchlists; the active watchlist scopes display across all screens; medians
+and sector aggregates remain anchored to the full universe.
 
 ---
 
-## Phase 10 — FX activation
+## Phase 11 — Annual statements + Statements view options
 
-**Deliverable**: the warehouse handles non-USD tickers correctly; USD
-equivalents available throughout.
+**Deliverable**: the warehouse holds both quarterly and annual statements;
+the Deep Dive Statements panel offers period (annual/quarterly), depth
+(summary/full), and units (B/M/K/raw) toggles.
 
-- DDL for `fx_rates_daily` (already in Phase 1 schema; loader is new).
-- Loader for FX rates from chosen source (see open questions).
-- USD-equivalent views: `prices_daily_usd`, `quarterly_fundamentals_usd`,
-  etc. Native columns preserved alongside.
-- UI toggle on the Home page: "show in USD" / "show in native currency".
-- Test by adding a non-US ticker via the Universe page (e.g., `7203.TSE` for
-  Toyota or an LSE name) and verifying both native and USD values render
-  correctly.
+The fundamentals JSON already contains `Financials.*.yearly` arrays
+alongside `.quarterly`, but the Phase 1 parser only reads `.quarterly`. This
+phase adds annual ingestion and the corresponding UI controls.
 
-**Done when**: an LSE or TSE ticker added via the universe page works
-end-to-end with correct currency display.
+### Schema migration
+
+`src/schema/migrations/002_statements_period_type.sql`:
+
+- ALTER TABLE on `income_statement`, `balance_sheet`, `cash_flow` to add
+  `period_type VARCHAR NOT NULL DEFAULT 'quarterly'`.
+- Drop old primary key, add new key on `(ticker, fiscal_period_end,
+  period_type)`. Necessary because annual Q4 fiscal-period-end may collide
+  with quarterly Q4 fiscal-period-end for the same date.
+- Backfill: existing rows default to `period_type = 'quarterly'`.
+
+### Parser update
+
+`src/ingest/sections/financials.py`:
+
+- Read both `.quarterly` and `.yearly` arrays.
+- Same field-name normalization (camelCase → snake_case, including the two
+  vendor typos already handled).
+- Annual rows written with `period_type = 'annual'`.
+- Annual `report_date` comes from `filing_date` of the annual filing — note
+  this differs from the Q4 quarterly `report_date`.
+
+### Re-ingest to backfill annual data
+
+After the migration ships, run the bulk loader (Phase 9) over the existing
+universe to populate annual rows for every ticker. Built-in idempotency
+makes this safe: quarterly rows are untouched, annual rows fill in.
+
+### UI
+
+Deep Dive Statements panel gains three controls:
+
+1. **Period**: Annual | Quarterly (default: Quarterly — current behavior)
+2. **Depth**: Summary | Full (default: Summary — current behavior)
+3. **Units**: Billions | Millions | Thousands | Raw (default: Billions —
+   current behavior)
+
+- "Summary" = the existing curated column list per statement type.
+- "Full" = every snake_case column in the table for that statement type.
+  Many will be NULL for any given ticker; that's expected and acceptable
+  (documented in `AGENTS.md` "Sector-structure mismatches").
+- Units divide displayed values by 1e9 / 1e6 / 1e3 / 1, with a unit suffix
+  in the column header.
+
+### Query layer
+
+- `queries.statement(ticker, statement_type, period_type, depth) ->
+  DataFrame` returns the appropriate rows + columns for the toggle state.
+- Display unit conversion happens in the page (or a small helper), not in
+  SQL, so the underlying data view is canonical.
+
+### Tests
+
+- Annual ingestion: AAPL fixture extended with `.yearly` block produces
+  `period_type = 'annual'` rows.
+- Migration runs cleanly on the existing warehouse (no data loss in
+  quarterly rows).
+- Toggle combinations: each of the 16 combinations of period × depth × units
+  renders without error on a populated ticker.
+- Unit math: a known value of 1.234e9 displays as 1.23 (Billions), 1234.00
+  (Millions), 1234000.00 (Thousands), 1234000000 (Raw).
+- "Full" view shows columns that "Summary" hides; "Summary" doesn't drop
+  required columns (revenue, net income, total assets, etc.).
+
+**Done when**: user can switch the Statements panel to annual view, see the
+full statement, and read it in Millions — without page refresh — and the
+underlying tables hold both periods.
 
 ---
 
-## Phase 11 — Forward-looking screens
+## Phase 12 — Universe-manager drill-down (modal)
 
-**Deliverable**: screens that exploit accumulated daily snapshots. **Requires
-≥30 days of Phase 6 data before they produce signal.**
+**Deliverable**: clicking a row on the Universe management page opens a
+modal showing the underlying price history and fundamentals for that ticker,
+read-only, paginated to avoid loading decades of data at once.
 
-- Net rating upgrades over 7d / 30d / 90d windows.
-- Target price raised by > X% over N days.
-- Forward EPS estimate revised up (current FY, next FY) — uses
-  `analyst_estimates_history`.
-- Earnings beat-and-revise: positive surprise last quarter AND estimates
-  raised since.
-- Each screen is a query against `daily_forward_snapshot` +
-  `analyst_estimates_history`, added to `src/screens/`.
+### UI
 
-**Done when**: user can answer "what changed this week in my universe?"
+- Use `st.dialog` (Streamlit 1.34+) for the modal. Triggered by a button
+  per universe row (or a clickable cell, depending on Streamlit table
+  affordances at the time).
+- Two tabs inside the dialog:
+  - **Prices** (priority): paginated OHLCV + adjusted close.
+  - **Fundamentals**: latest quarterly and annual rows from IS/BS/CF, plus
+    `earnings_events` and `shares_outstanding` recent rows.
+
+### Prices tab
+
+- Default 100 rows per page, sorted descending by date.
+- Page-size selector: 50 / 100 / 250 / 500.
+- Pagination controls: prev / next / jump-to-page.
+- Optional date-range filter (`from` / `to` date pickers) — if set,
+  pagination operates on the filtered range.
+- Columns: `date`, `open`, `high`, `low`, `close`, `adjusted_close`,
+  `volume`. Numbers in raw units (no Billions conversion — these are share
+  prices and counts).
+
+### Fundamentals tab
+
+- Three sub-sections (IS / BS / CF) with toggle for quarterly vs annual,
+  reusing the Phase 11 query helpers.
+- Default: most recent 8 quarterly periods or 5 annual periods.
+- Read-only display only.
+
+### Query layer
+
+- `queries.prices_page(ticker, page_size, offset, date_from=None,
+  date_to=None) -> DataFrame`. SQL uses `LIMIT ... OFFSET ...` on
+  `prices_daily`, ordered by date desc. Existing `(ticker, date)` index
+  makes this O(log n).
+- `queries.prices_count(ticker, date_from=None, date_to=None) -> int` for
+  total-page calculation.
+- `queries.fundamentals_recent(ticker, statement_type, period_type, n=8)`.
+
+### Tests
+
+- Pagination math: page 2 of size 100 returns rows 101–200.
+- Date-range filter intersects correctly with pagination.
+- Empty results (e.g., a brand-new ticker with no price load yet) render
+  without error.
+- Memory: opening the dialog for AAPL (~12,000 trading days) loads only
+  the current page, not the full history.
+
+**Done when**: user clicks a universe row, sees a modal with paginated
+prices in <500ms, and can flip to fundamentals without re-fetching prices.
+
+---
+
+## Phase 13 — Forward-looking screens
+
+**Deliverable**: a Forward Screens page with screens grouped into "Vendor
+trends (works immediately)" and "Snapshot history (≥30 days)."
+
+The vendor's `Earnings.Trend` block carries pre-computed 7-day and 30-day
+deltas for EPS and revenue estimates per future fiscal period. These power
+revision-tracking screens *without* needing our own accumulated snapshot
+history. Rating-change screens still need accumulated `daily_forward_snapshot`
+data because EODHD's `AnalystRatings` is point-in-time only.
+
+### Phase 13A — Vendor-trend screens (works immediately)
+
+**Verify column coverage first.** Before building screens, check that
+`analyst_estimates_history` (per Phase 1 parser) actually persists these
+fields from `Earnings.Trend`:
+
+- `eps_trend_current`, `eps_trend_7days_ago`, `eps_trend_30days_ago`,
+  `eps_trend_60days_ago`, `eps_trend_90days_ago`
+- `eps_revisions_up_last_7days`, `eps_revisions_up_last_30days`,
+  `eps_revisions_down_last_7days`, `eps_revisions_down_last_30days`
+- Same set of fields for revenue.
+
+If any are missing, ship a schema migration to add them and re-ingest. The
+fields are zero-cost to store and the only blocker to vendor-trend screens.
+
+**Screens** (each as a parameterized function in
+`src/screens/forward_vendor.py`):
+
+- **EPS estimate revised up over 7d / 30d**: filters tickers where
+  `eps_trend_current > eps_trend_30days_ago` by at least a configurable
+  threshold, optionally scoped to a specific future-period bucket (e.g.,
+  next quarter, current FY, next FY).
+- **Revenue estimate revised up over 7d / 30d**: analog of the above.
+- **Net upward EPS revisions**: `eps_revisions_up_last_30days -
+  eps_revisions_down_last_30days >= N`, with N tunable.
+- **Beat-and-revise**: positive surprise in latest `earnings_events` AND
+  current EPS estimate > 30-days-ago estimate for the next period.
+
+### Phase 13B — Snapshot-history screens (works after ~30 days)
+
+- **Consensus rating shift over N days**: difference between latest
+  `daily_forward_snapshot.consensus_rating` and N-days-ago value. Surface
+  tickers with >0.5 rating-point shift up or down.
+- **Target price raised by > X% over N days**: same idea against
+  `target_price`.
+- Both gated by a per-ticker "days of snapshot history" check; tickers below
+  the threshold are excluded with a count surfaced ("3 tickers have
+  insufficient history").
+
+### UI
+
+- New page `src/app/pages/5_Forward_Screens.py`. Screens grouped under two
+  headers: "Vendor trends" and "Snapshot history (≥30 days)."
+- Same display-set / comparison-set discipline from Phase 10: an active
+  watchlist filters which results are shown, not which tickers are
+  scanned.
+- "Save as watchlist" button (per Phase 10).
+
+### Tests
+
+- 13A: each vendor-trend screen runs against the loaded universe and
+  produces sane results; threshold parameters change result counts
+  monotonically.
+- 13A: column-presence check passes after the migration (every required
+  field is non-null for at least one recent ticker-period pair).
+- 13B: insufficient-history gate excludes tickers correctly and reports
+  the count.
+- Watchlist interaction: 13A and 13B both respect the active watchlist for
+  display but never for comparison.
+
+**Done when**: 13A screens are immediately useful on day 1 of the phase;
+13B screens are wired up and waiting for the snapshot table to accumulate
+30+ days for the relevant tickers.
+
+---
+
+## Phase 14 — FX activation (deferred)
+
+**Deliverable**: non-USD tickers work end-to-end with both native and USD
+presentations.
+
+Triggered only when the user wants to add a non-US ticker. Unchanged from
+the original Phase 10 plan: FX rate loader, USD-equivalent views
+(`prices_daily_usd`, `quarterly_fundamentals_usd`, etc.), Home page toggle
+"USD" / "native," and an acceptance test on an LSE or TSE ticker.
+
+---
+
+## Transition to Jira
+
+After Phase 13 (and possibly Phase 14, if non-US tickers come up), new
+work moves to a Jira board rather than PLAN.md. The criterion is rough:
+
+- **Stays in PLAN.md**: anything touching the schema, the ingestion model,
+  or a whole new section of the UI.
+- **Goes to Jira**: UI tweaks, additional screen variants, performance
+  improvements, individual bug fixes, sector-template work, alerts/digests,
+  per-ticker watchlist annotations, backtesting harness.
+
+PLAN.md remains as the historical record. AGENTS.md continues to be the
+living design document and gets updated whenever a phase resolves an
+open question or introduces a new convention.
 
 ---
 
 ## Future (post-MVP, ordered loosely)
 
-- Earnings calendar / events page (next 5 / 10 / 30 days reporting)
+- Portfolio calculations on watchlists with `shares` populated (current
+  value, weight, gain/loss, sector allocation)
+- Country-scoped or region-scoped comparison sets (medians within country
+  rather than global)
+- Sector-template UI (per AGENTS.md "Sector-structure mismatches")
+- Earnings calendar / events page
 - Overnight digest of changes (new highs, rating moves, estimate revisions,
   upcoming earnings)
-- Per-ticker watchlist annotations (your own notes in `universe.notes`)
-- Backtesting harness combining screens + price history to evaluate signals
-- True point-in-time prices via a corporate-actions table and re-derived
-  adjustment factors (only if a backtest requires it)
-- Bulk import of an index (e.g., S&P 500 constituents into the universe)
-- Multi-user / authentication (currently single-user local)
-- Migration off Streamlit if performance demands it
+- Backtesting harness combining screens + price history
+- True point-in-time prices via corporate-actions table
+- S&P 500 / Russell 1000 constituent importer (if maintenance of static
+  uploads becomes tedious)
+- EC2 deployment (Docker setup from Phase 9 carries over)
+- Multi-user / authentication
 
 ---
 
 ## Known limitations and risks
 
-The following are **known issues we are NOT solving in the MVP**. They're
-documented here so they don't come back as surprises, and so future phases
-or refactors can address them deliberately rather than rediscovering them.
-A coding agent encountering one of these in the wild should flag it rather
-than paper over it.
+(Original list retained: debt classification ambiguity; sector-structure
+mismatches for banks/insurers/REITs; restatement detection; multiple share
+classes; pre-IPO short history; spin-offs; adjusted_close replacement
+semantics; vendor client tests use mocks not VCR.)
 
-### Debt classification ambiguity
+### Additional limitations introduced by post-MVP phases
 
-EODHD's balance sheet exposes six overlapping debt-related fields:
-`short_term_debt`, `long_term_debt`, `short_long_term_debt`,
-`short_long_term_debt_total`, `long_term_debt_total`, and `net_debt`. Plus
-related items like `capital_lease_obligations`. These do not always sum
-cleanly, and the vendor's definitions are not always consistent across
-companies or with how a given company reports in its own filings. Specific
-known issues:
-
-- **Operating lease debt** post-ASC 842 may or may not be included in
-  long-term debt depending on the company.
-- **Current portion of long-term debt** appears in both `short_term_debt`
-  and inside `long_term_debt_total` for some tickers; subtracting blindly
-  double-counts.
-- **`net_debt`** is vendor-computed and we have no documentation on the
-  exact formula. We store it but **derived net-debt fields in screens
-  should compute it ourselves** from cash + short-term investments vs. total
-  debt of choice — and the choice is what's ambiguous.
-
-**Mitigation in MVP**: ratios like EV/EBITDA and net debt / EBITDA use a
-single explicit formula (`long_term_debt_total + short_term_debt -
-cash_and_short_term_investments`) documented in `src/compute/`. Screens
-that depend on debt are tagged "approximate" in the UI. A future phase
-addressing this would build a corrections layer keyed on
-(ticker, fiscal_period_end) for hand-curated overrides.
-
-### Sector-structure mismatches
-
-The 64-field balance sheet, 34-field income statement, and 32-field cash
-flow are modeled on a non-financial, non-real-estate company. Tickers
-outside that mold produce mostly-NULL or misleading rows:
-
-- **Banks and broker-dealers**: balance sheet is loans, deposits, and
-  borrowings, not assets/liabilities in the operating sense. Fields like
-  `inventory`, `accounts_payable`, `total_current_liabilities` are not
-  meaningful. The income statement's `net_interest_income` is the headline
-  number, not `gross_profit`. EBITDA is meaningless (interest is core
-  operations, not a financing cost).
-- **Insurers**: float and reserves dominate the liability side. Net income
-  is volatile due to investment gains and reserve releases.
-- **REITs**: depreciation is non-cash and arguably non-economic. FFO and
-  AFFO matter more than net income or FCF. Standard P/E and FCF yield mean
-  little.
-- **Many non-US filers** report under IFRS with different line-item
-  conventions and semi-annually rather than quarterly.
-
-**Mitigation in MVP**: the MVP universe is intentionally all tech /
-consumer / media. No banks, insurers, or REITs. When tickers from these
-sectors are added later, expect: (a) many NULL fields, (b) some derived
-ratios (current ratio, EBITDA-based multiples) showing as N/A or
-nonsensical, and (c) the deep-dive page showing the data faithfully but
-without sector-specific transformations.
-
-A future phase to address this would add a `sector_template` concept that
-swaps the deep-dive panels and the screen list based on
-`security_master.gic_sector` (e.g., bank-specific panels for net interest
-margin, NPL ratios, tier-1 capital; REIT-specific panels for FFO/AFFO).
-
-### Other known limitations
-
-- **Restatements**: handled via `loaded_at` but we do not alert when one
-  occurs. Current design uses in-place updates keyed by natural keys (latest
-  value retained; prior values not kept as separate versions). A future phase
-  could surface "restated since last load" as a flag on the deep-dive page.
-- **Multiple share classes**: GOOG vs. GOOGL are separate tickers in EODHD.
-  We do not collapse them. The user is expected to pick the class they want.
-- **Pre-IPO and short-history tickers**: CRWD (2019) and U (2020) have
-  limited historical multiples. Relative-to-own-history screens may produce
-  meaningless percentiles for very young tickers; consider gating on
-  minimum-history thresholds in Phase 7.
-- **Spin-offs and major mergers**: the price series before such events
-  reflects the predecessor entity. The vendor's adjusted_close may or may
-  not handle this cleanly; cross-check is a manual exercise per case.
-- **`adjusted_close` replacement semantics**: the Phase 2 price ingestion uses
-  `UPSERT` for all price columns including `adjusted_close`. Because we always
-  download the full price history on every load, this is functionally
-  equivalent to the "strict full-column replacement" pattern described in the
-  ingestion model. If the vendor ever truncates or corrects the date range of
-  the returned series, stale rows for removed dates would retain their old
-  `adjusted_close` values. Address this with a DELETE-then-INSERT or
-  DELETE-orphan approach if it ever surfaces in practice.
-- **Vendor client tests use mocks, not VCR cassettes**: Phase 2 retry/error
-  tests use `unittest.mock.patch` on `httpx.get` rather than recorded HTTP
-  fixtures. This is sufficient for testing request construction and retry
-  logic; API contract drift would require a separate acceptance test against
-  the live API or manually recorded cassettes.
+- **Watchlists are snapshots, not dynamic** (Phase 10). A watchlist created
+  from a screen result is frozen at creation time. If the underlying screen
+  result drifts (new earnings, price changes), the watchlist does not
+  update automatically. Re-save to refresh. Documented as expected behavior.
+- **Country-scoped comparisons not implemented** (Phase 10 / 14). All
+  median, percentile, and sector calculations use the full active universe
+  regardless of country. When non-US tickers are added this may produce
+  noisy comparisons (e.g., a Japanese REIT vs. a US REIT). Schema supports
+  the future refactor; the change is in `queries.py` only.
+- **Annual statements may double-count quarters** in naive joins (Phase
+  11). Any query joining `income_statement` to itself or to other statement
+  tables must filter on `period_type` explicitly. Documented in
+  `AGENTS.md`; query helpers in `queries.py` always set period_type.
+- **DuckDB single-writer constraint** (Phase 9). The cron load is scheduled
+  outside UI hours by default. If the user opens Streamlit during the
+  scheduled load, the load fails. Surface this as a clear error in the
+  `load_runs` table.
+- **EODHD rate-limit assumptions** (Phase 9). Conservative defaults pending
+  confirmation of subscription tier. Adjust `config/settings.yml` once the
+  tier is known.
 
 ---
 
@@ -607,22 +616,32 @@ margin, NPL ratios, tier-1 capital; REIT-specific panels for FFO/AFFO).
 
 | Question | Needed before | Default if undecided |
 |---|---|---|
-| EODHD subscription tier / rate limits | Phase 2 | check EODHD account settings; throttle conservatively (e.g., 5 req/s) |
-| Archive every daily raw file, or just keep the latest? | Phase 2 | archive for first 90 days, then purge; flag in `settings.yml` |
-| Beta benchmark: SPY only, or also per-region (TPX, EWU)? | ~~Phase 4~~ RESOLVED | SPY via `prices_daily`; add via `add_ticker("SPY")`. Per-region deferred to Phase 10. |
-| FX rate source — EODHD, ECB, Yahoo? | Phase 10 | EODHD if available (single vendor); else ECB |
+| EODHD subscription tier / rate limits | Phase 9 (load 500+) | conservative throttle: 20 RPM; adjust upward after first successful bulk load |
+| Archive every daily raw file, or just keep the latest? | Phase 9 | archive for first 90 days, then purge; flag in `settings.yml` |
+| Docker base image | Phase 9 | `python:3.11-slim` |
+| Cron timing for daily load | Phase 9 | 02:00 local (quiet hours, avoids UI overlap) |
+| Should "save as watchlist" capture filter parameters too (for re-evaluation later) or just the ticker list? | Phase 10 | ticker list only; "rebuild watchlist from filter" deferred as future work |
+| Watchlist names: case-sensitive uniqueness? | Phase 10 | case-insensitive uniqueness; store as user-entered, compare lowered |
+| FX rate source — EODHD, ECB, Yahoo? | Phase 14 | EODHD if available; else ECB |
 | Forward-snapshot retention — keep forever, or roll off after N years? | when table grows large | keep forever; revisit at 5 GB |
-| `analyst_estimates_history` — snapshot daily, or only on changes? | Phase 6 | daily for simplicity; can compress later by collapsing unchanged runs |
-| Should `remove_ticker` ever hard-delete? | Phase 3 | no; soft delete only. Provide a separate `purge_ticker` utility if ever needed |
-| Net debt formula for screens — which fields, exactly? | ~~Phase 4~~ RESOLVED | `long_term_debt_total + short_term_debt - cash_and_short_term_investments`; see `src/compute/multiples.py` |
+
+(Resolved questions from earlier phases retained: beta benchmark = SPY via
+`add_ticker("SPY")`; net debt formula = `long_term_debt_total +
+short_term_debt - cash_and_short_term_investments`; analyst_estimates_history
+daily snapshot frequency = daily for simplicity; `remove_ticker` is soft
+delete only.)
 
 ---
 
 ## How to use this plan
 
-- **One phase at a time**. Don't start Phase 5 with Phase 4 half-done.
+- **One phase at a time**. Don't start Phase 11 with Phase 10 half-done.
 - **Each phase ends with a runnable system**. If you can't demo something
   new at the end of a phase, the phase isn't done.
 - **Tests gate completion**. A phase isn't done if its tests aren't.
 - **Document deviations**. If you change a design decision mid-build, update
   AGENTS.md in the same commit. The two files must stay coherent.
+- **From Phase 9 onward, prefer testing against the loaded production
+  universe** (500+ tickers). Performance issues, edge cases, and
+  sector-structure mismatches surface there that the 10-ticker fixture
+  hides.

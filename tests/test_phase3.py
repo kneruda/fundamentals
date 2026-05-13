@@ -58,8 +58,8 @@ def test_add_ticker_valid_populates_warehouse(tmp_path, db, monkeypatch):
     from src.universe import add_ticker
 
     with (
-        patch("src.ingest.fetch.fetch_fundamentals", return_value=fund_data),
-        patch("src.ingest.fetch.fetch_prices", return_value=price_data),
+        patch("src.ingest.orchestrator.fetch_fundamentals", return_value=fund_data),
+        patch("src.ingest.orchestrator.fetch_prices", return_value=price_data),
         patch("src.ingest.orchestrator._settings", return_value=_mock_settings(tmp_path)),
     ):
         add_ticker(db, "AAPL")
@@ -81,8 +81,8 @@ def test_add_ticker_idempotent(tmp_path, db, monkeypatch):
     from src.universe import add_ticker
 
     with (
-        patch("src.ingest.fetch.fetch_fundamentals", return_value=fund_data),
-        patch("src.ingest.fetch.fetch_prices", return_value=price_data),
+        patch("src.ingest.orchestrator.fetch_fundamentals", return_value=fund_data),
+        patch("src.ingest.orchestrator.fetch_prices", return_value=price_data),
         patch("src.ingest.orchestrator._settings", return_value=_mock_settings(tmp_path)),
     ):
         add_ticker(db, "AAPL")
@@ -105,8 +105,8 @@ def test_add_ticker_preserves_canonical_ticker(tmp_path, db, monkeypatch):
     from src.universe import add_ticker
 
     with (
-        patch("src.ingest.fetch.fetch_fundamentals", return_value=fund_data),
-        patch("src.ingest.fetch.fetch_prices", return_value=price_data),
+        patch("src.ingest.orchestrator.fetch_fundamentals", return_value=fund_data),
+        patch("src.ingest.orchestrator.fetch_prices", return_value=price_data),
         patch("src.ingest.orchestrator._settings", return_value=_mock_settings(tmp_path)),
     ):
         add_ticker(db, "7203.TSE")
@@ -154,8 +154,8 @@ def test_remove_add_roundtrip(tmp_path, db, monkeypatch):
     price_data = json.loads(PRICES.read_text())
 
     with (
-        patch("src.ingest.fetch.fetch_fundamentals", return_value=fund_data),
-        patch("src.ingest.fetch.fetch_prices", return_value=price_data),
+        patch("src.ingest.orchestrator.fetch_fundamentals", return_value=fund_data),
+        patch("src.ingest.orchestrator.fetch_prices", return_value=price_data),
         patch("src.ingest.orchestrator._settings", return_value=_mock_settings(tmp_path)),
     ):
         add_ticker(db, "AAPL")

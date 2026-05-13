@@ -7,7 +7,9 @@ expectations for a user-managed universe of stocks.
 See [`AGENTS.md`](AGENTS.md) for design guidance and [`PLAN.md`](PLAN.md)
 for the phased implementation roadmap.
 
-## Quickstart
+---
+
+## Quickstart (local dev)
 
 ```bash
 # 1. Install dependencies
@@ -15,63 +17,113 @@ uv sync
 
 # 2. Configure your EODHD API token
 cp .env.example .env
-# Edit .env and set EODHD_API_TOKEN
+# Edit .env and set EODHD_API_TOKEN=<your_token>
 
-# 3. Run tests + linting
-uv run pytest
-uv run ruff check .
-uv run black --check .
-
-# 4. Seed the warehouse with the initial universe (Phase 3+)
+# 3. Seed the warehouse with the initial universe (~10 tickers)
 uv run python scripts/seed_universe.py
 
-# 5. Add or remove tickers later
-uv run python scripts/add_ticker.py SHOP
-
-# 6. Daily refresh (schedule this via cron after Phase 6)
-uv run python scripts/load_daily.py
-
-# 7. Launch the dashboard (Phase 5+)
+# 4. Launch the dashboard
 uv run streamlit run src/app/Home.py
 ```
 
-## Status
+The dashboard opens at http://localhost:8501. Use the **Universe** page to
+add/remove tickers, view load status, and run bulk uploads from there.
 
-This project is built in phases — see `PLAN.md`. Not every command above
-works in every phase; the README lists the eventual full surface.
+---
 
-## Project layout
+## Quickstart (Docker)
 
-See [`AGENTS.md`](AGENTS.md) → "Repository layout".
+```bash
+# Build images
+docker compose build
 
-## Configuration
+# One-shot: seed + daily load
+docker compose run --rm app uv run python scripts/seed_universe.py
+docker compose run --rm app uv run python scripts/load_daily.py
 
-- **Secrets** (API tokens): `.env`, never committed.
-- **Settings** (paths, throttles, defaults): `config/settings.yml`.
-- **Initial universe**: `config/universe.yml` (seed only; runtime source of
-  truth is the `universe` table in the warehouse).
+# Long-running: launch the UI
+docker compose up streamlit
+```
+
+Or use the Makefile shortcuts:
+
+```bash
+make load    # run load_daily.py via Docker
+make ui      # start Streamlit on port 8501
+make shell   # open a bash shell inside the container
+make test    # run pytest inside the container
+```
+
+Both workflows mount `./data` and `./.env` into the container, so the
+warehouse and API token are shared between host and container.
+
+---
+
+## Bulk-loading a large universe
+
+To load hundreds of tickers at once with rate limiting and resumable
+checkpointing:
+
+```bash
+# Create a text file with one ticker per line (# comments and blank lines ignored)
+uv run python scripts/bulk_load.py --file path/to/tickers.txt
+
+# If the job is interrupted, resume it with the printed job ID
+uv run python scripts/bulk_load.py --resume <job_id>
+```
+
+Default throttle: 20 tickers/min (configurable in `config/settings.yml`
+under `bulk_load.requests_per_minute`). Each ticker makes 2 API calls
+(fundamentals + prices). Adjust upward once you confirm your EODHD tier.
+
+---
+
+## Other scripts
+
+```bash
+uv run python scripts/add_ticker.py SHOP      # add a single ticker
+uv run python scripts/load_daily.py           # daily refresh (all active tickers)
+uv run python scripts/rebuild.py              # rebuild warehouse from local raw files
+uv run python scripts/seed_universe.py        # (re-)seed from config/universe.yml
+```
+
+---
 
 ## Scheduling the daily load
 
-`scripts/load_daily.py` should run once per day after US market close (~17:00 ET)
-to capture fresh fundamentals and analyst snapshots. At least 30 days of snapshots
-are needed before forward-looking screens (Phase 9) produce signal.
+Run `scripts/load_daily.py` once per day after US market close. At least
+30 days of analyst snapshots are needed before forward-looking screens
+produce signal.
 
-### macOS / Linux (cron)
+> **DuckDB constraint**: only one writer at a time. Schedule loads during
+> quiet hours so they don't conflict with an open Streamlit session.
+> The default cron schedule (02:00 local) avoids this in practice.
+
+### Cron (macOS / Linux)
+
+See [`scripts/cron.example`](scripts/cron.example) for a ready-to-paste
+snippet. Quick setup:
 
 ```bash
+mkdir -p data/logs
 crontab -e
 ```
 
-Add a line (runs at 17:30 ET = 21:30 UTC Mon–Fri):
+Add (runs at 02:00 local, Mon–Fri via Docker):
 
 ```
-30 21 * * 1-5 cd /path/to/fundamentals && uv run python scripts/load_daily.py >> data/logs/load_daily.log 2>&1
+0 2 * * 1-5 cd /path/to/project && docker compose run --rm app \
+    uv run python scripts/load_daily.py >> data/logs/cron.log 2>&1
 ```
 
-Create the log directory first: `mkdir -p data/logs`.
+Or without Docker:
 
-### macOS (launchd)
+```
+0 2 * * 1-5 cd /path/to/project && uv run python scripts/load_daily.py \
+    >> data/logs/cron.log 2>&1
+```
+
+### macOS launchd
 
 Create `~/Library/LaunchAgents/com.fundamentals.load_daily.plist`:
 
@@ -92,23 +144,41 @@ Create `~/Library/LaunchAgents/com.fundamentals.load_daily.plist`:
     <key>WorkingDirectory</key>  <string>/path/to/fundamentals</string>
     <key>StartCalendarInterval</key>
     <dict>
-        <key>Hour</key>          <integer>17</integer>
-        <key>Minute</key>        <integer>30</integer>
+        <key>Hour</key>   <integer>2</integer>
+        <key>Minute</key> <integer>0</integer>
     </dict>
     <key>StandardOutPath</key>   <string>/path/to/fundamentals/data/logs/load_daily.log</string>
     <key>StandardErrorPath</key> <string>/path/to/fundamentals/data/logs/load_daily.err</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>EODHD_API_TOKEN</key> <string>your_token_here</string>
-    </dict>
 </dict>
 </plist>
 ```
 
 Load it: `launchctl load ~/Library/LaunchAgents/com.fundamentals.load_daily.plist`
 
+---
+
+## Dev commands
+
+```bash
+uv run pytest                             # run tests
+uv run ruff check . && uv run black --check .   # lint + format check
+uv run python scripts/load_daily.py      # fetch + ingest universe
+uv run python scripts/rebuild.py         # full rebuild from raw (no fetch)
+uv run streamlit run src/app/Home.py     # launch dashboard
+```
+
+---
+
+## Configuration
+
+- **Secrets** (API token): `.env` — never committed. Copy from `.env.example`.
+- **Settings** (paths, throttles, defaults): `config/settings.yml`.
+- **Initial universe**: `config/universe.yml` (seed only; runtime source of
+  truth is the `universe` table in the warehouse).
+
+---
+
 ## Vendor
 
 Data comes from [EODHD](https://eodhd.com/). The free tier covers the MVP
-universe; higher tiers unlock more fundamentals history and faster
-rate limits.
+universe; higher tiers unlock more fundamentals history and faster rate limits.

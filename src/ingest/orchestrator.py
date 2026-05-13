@@ -1,12 +1,14 @@
 import json
 import logging
 import shutil
+import time
 from datetime import date
 from pathlib import Path
 
 import duckdb
 import yaml
 
+from .fetch import fetch_fundamentals, fetch_prices
 from .sections.analyst_snapshot import ingest_analyst_snapshot
 from .sections.dividends import ingest_dividends
 from .sections.earnings import ingest_earnings
@@ -64,8 +66,6 @@ def ingest_ticker(
 
 def fetch_and_ingest(con: duckdb.DuckDBPyConnection, ticker: str) -> None:
     """Fetch fresh data from EODHD, optionally archive, then ingest."""
-    from .fetch import fetch_fundamentals, fetch_prices
-
     cfg = _settings()
     paths = cfg.get("paths", {})
     ingest_cfg = cfg.get("ingest", {})
@@ -83,23 +83,45 @@ def fetch_and_ingest(con: duckdb.DuckDBPyConnection, ticker: str) -> None:
 
     today = date.today().isoformat()
 
-    if not _fresh_today(fund_path):
-        log.info("fetching fundamentals ticker=%s", ticker)
-        fund_data = fetch_fundamentals(ticker)
-        fund_path.write_text(json.dumps(fund_data))
+    t0 = time.monotonic()
+    try:
+        if not _fresh_today(fund_path):
+            log.info("fetching fundamentals ticker=%s", ticker)
+            fund_data = fetch_fundamentals(ticker)
+            fund_path.write_text(json.dumps(fund_data))
 
-    if not _fresh_today(price_path):
-        log.info("fetching prices ticker=%s", ticker)
-        price_data = fetch_prices(ticker)
-        price_path.write_text(json.dumps(price_data))
+        if not _fresh_today(price_path):
+            log.info("fetching prices ticker=%s", ticker)
+            price_data = fetch_prices(ticker)
+            price_path.write_text(json.dumps(price_data))
 
-    if do_archive:
-        arch = archive_dir / today
-        arch.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(fund_path, arch / f"{ticker}-fundamentals.json")
-        shutil.copy2(price_path, arch / f"{ticker}-prices.json")
+        if do_archive:
+            arch = archive_dir / today
+            arch.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(fund_path, arch / f"{ticker}-fundamentals.json")
+            shutil.copy2(price_path, arch / f"{ticker}-prices.json")
 
-    ingest_ticker(con, fund_path, price_path, ticker=ticker)
+        ingest_ticker(con, fund_path, price_path, ticker=ticker)
+        _record_load_run(con, ticker, "ok", int((time.monotonic() - t0) * 1000))
+    except Exception as exc:
+        _record_load_run(con, ticker, "failed", int((time.monotonic() - t0) * 1000), str(exc))
+        raise
+
+
+def _record_load_run(
+    con: duckdb.DuckDBPyConnection,
+    ticker: str,
+    status: str,
+    duration_ms: int,
+    error_message: str | None = None,
+) -> None:
+    try:
+        con.execute(
+            "INSERT INTO load_runs (ticker, status, duration_ms, error_message) VALUES (?, ?, ?, ?)",
+            [ticker, status, duration_ms, error_message],
+        )
+    except Exception:
+        log.warning("could not write load_run ticker=%s", ticker)
 
 
 def ingest_universe(con: duckdb.DuckDBPyConnection) -> None:

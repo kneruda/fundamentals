@@ -1,0 +1,7 @@
+# Daily universe load at 02:00 local (quiet hours; avoids DuckDB single-writer conflict with UI).
+# Adjust /path/to/project to the absolute path of the project root.
+#
+# To install: run `crontab -e` and paste the line below.
+#
+0 2 * * 1-5 cd /path/to/project && docker compose run --rm app \
+    uv run python scripts/load_daily.py >> data/logs/cron.log 2>&1

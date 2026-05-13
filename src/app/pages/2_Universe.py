@@ -49,9 +49,17 @@ def main() -> None:
         st.info("No tickers in universe yet.")
     else:
         display = df[
-            ["ticker", "name", "sector", "added_at", "last_loaded", "active", "notes"]
+            [
+                "ticker", "name", "sector", "added_at",
+                "last_load_at", "load_status", "price_start", "price_end",
+                "active", "notes",
+            ]
         ].copy()
-        display.columns = ["Ticker", "Name", "Sector", "Added", "Last Loaded", "Active", "Notes"]
+        display.columns = [
+            "Ticker", "Name", "Sector", "Added",
+            "Last Load", "Status", "Price Start", "Price End",
+            "Active", "Notes",
+        ]
         st.dataframe(display, hide_index=True, width="stretch")
 
     # ---- Snapshot coverage ----

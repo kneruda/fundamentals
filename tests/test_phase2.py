@@ -254,8 +254,8 @@ def test_fetch_and_ingest_writes_raw_files(tmp_path, db, monkeypatch):
     price_data = PRICES.read_text()
 
     with (
-        patch("src.ingest.fetch.fetch_fundamentals", return_value=json.loads(fund_data)),
-        patch("src.ingest.fetch.fetch_prices", return_value=json.loads(price_data)),
+        patch("src.ingest.orchestrator.fetch_fundamentals", return_value=json.loads(fund_data)),
+        patch("src.ingest.orchestrator.fetch_prices", return_value=json.loads(price_data)),
         patch("src.ingest.orchestrator._settings") as mock_cfg,
     ):
         mock_cfg.return_value = {
@@ -289,8 +289,8 @@ def test_fetch_and_ingest_archives_when_enabled(tmp_path, db, monkeypatch):
     today = date.today().isoformat()
 
     with (
-        patch("src.ingest.fetch.fetch_fundamentals", return_value=fund_data),
-        patch("src.ingest.fetch.fetch_prices", return_value=price_data),
+        patch("src.ingest.orchestrator.fetch_fundamentals", return_value=fund_data),
+        patch("src.ingest.orchestrator.fetch_prices", return_value=price_data),
         patch("src.ingest.orchestrator._settings") as mock_cfg,
     ):
         mock_cfg.return_value = {
@@ -329,8 +329,8 @@ def test_fetch_and_ingest_skips_fetch_if_fresh(tmp_path, db, monkeypatch):
     mock_fetch_price = MagicMock(return_value=json.loads(PRICES.read_text()))
 
     with (
-        patch("src.ingest.fetch.fetch_fundamentals", mock_fetch_fund),
-        patch("src.ingest.fetch.fetch_prices", mock_fetch_price),
+        patch("src.ingest.orchestrator.fetch_fundamentals", mock_fetch_fund),
+        patch("src.ingest.orchestrator.fetch_prices", mock_fetch_price),
         patch("src.ingest.orchestrator._settings") as mock_cfg,
     ):
         mock_cfg.return_value = {

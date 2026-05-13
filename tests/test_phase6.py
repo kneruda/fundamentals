@@ -194,7 +194,7 @@ def test_add_ticker_eodhd_error_payload_leaves_universe_empty(tmp_path, db, monk
 
     with (
         patch(
-            "src.ingest.fetch.fetch_fundamentals",
+            "src.ingest.orchestrator.fetch_fundamentals",
             side_effect=ValueError("EODHD rejected ticker: Ticker Not Found."),
         ),
         patch("src.ingest.orchestrator._settings", return_value=mock_settings),

@@ -14,7 +14,7 @@ reporting_currency: USD
 vendor:
   base_url: https://eodhd.com/api
   # Conservative throttle. Tune up after confirming the EODHD plan limits.
-  requests_per_second: 5
+  requests_per_second: 10
   # Default exchange suffix appended to bare tickers (e.g., "AAPL" -> "AAPL.US")
   default_exchange: US
   # Seconds to wait between retries on transient failures (exponential)
@@ -31,3 +31,10 @@ ingest:
 # --- Benchmark for beta and relative comparisons ---
 benchmark:
   ticker: SPY.US
+
+# --- Bulk loader rate limits ---
+# requests_per_minute: ticker-level throttle for bulk_load.py (each ticker = 2 API calls).
+# Conservative default; tune upward once EODHD subscription tier is confirmed.
+bulk_load:
+  requests_per_minute: 500
+  requests_per_day: 10000

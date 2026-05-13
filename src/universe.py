@@ -55,18 +55,9 @@ def list_universe(con: duckdb.DuckDBPyConnection, active_only: bool = True) -> p
 
 
 def parse_tickers(text: str) -> list[str]:
-    """Return clean ticker list from a newline-delimited string.
+    from .ticker_input import parse_ticker_input
 
-    Blank lines and lines starting with '#' are ignored.
-    Each remaining line is stripped and uppercased.
-    """
-    result = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        result.append(stripped.upper())
-    return result
+    return parse_ticker_input(text)
 
 
 def bulk_add_tickers(

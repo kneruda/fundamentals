@@ -404,16 +404,42 @@ def cash_flow_history(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 8) -
 
 def universe_management_list(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     return con.execute("""
+        WITH latest_run AS (
+            SELECT ticker, MAX(run_started_at) AS last_run_at
+            FROM load_runs
+            GROUP BY ticker
+        ),
+        last_load AS (
+            SELECT lr.ticker, lr.run_started_at, lr.status, lr.error_message
+            FROM load_runs lr
+            JOIN latest_run r ON lr.ticker = r.ticker AND lr.run_started_at = r.last_run_at
+        ),
+        price_range AS (
+            SELECT ticker, MIN(date) AS price_start, MAX(date) AS price_end
+            FROM prices_daily
+            GROUP BY ticker
+        )
         SELECT
             u.ticker,
             sm.name,
             sm.sector,
-            u.added_at::DATE     AS added_at,
-            sm.loaded_at::DATE   AS last_loaded,
+            u.added_at::DATE            AS added_at,
+            ll.run_started_at           AS last_load_at,
+            CASE
+                WHEN ll.run_started_at IS NULL THEN 'never'
+                WHEN ll.status = 'failed'
+                    THEN 'failed: ' || COALESCE(ll.error_message, '')
+                WHEN DATEDIFF('day', ll.run_started_at::DATE, CURRENT_DATE) > 2 THEN 'stale'
+                ELSE 'ok'
+            END                         AS load_status,
+            pr.price_start,
+            pr.price_end,
             u.active,
             u.notes
         FROM universe u
         LEFT JOIN security_master sm ON u.ticker = sm.ticker
+        LEFT JOIN last_load ll       ON u.ticker = ll.ticker
+        LEFT JOIN price_range pr     ON u.ticker = pr.ticker
         ORDER BY u.active DESC, u.ticker
     """).df()
 
