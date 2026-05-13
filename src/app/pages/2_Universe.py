@@ -2,6 +2,9 @@
 Universe management page — add, remove, and refresh tickers.
 """
 
+import io
+
+import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -93,6 +96,61 @@ def main() -> None:
                     st.rerun()
                 except Exception as exc:
                     st.error(f"Failed to add {ticker_clean}: {exc}")
+
+    # ---- Bulk add ----
+    st.subheader("Bulk Add Tickers")
+    st.caption(
+        "Paste tickers one per line, or upload a .txt file. "
+        "Lines starting with # and blank lines are ignored. "
+        "Non-US tickers need the exchange suffix (e.g. SHOP.TO)."
+    )
+
+    bulk_text = st.text_area(
+        "Tickers (one per line)",
+        height=120,
+        placeholder="AAPL\nMSFT\nGOOG",
+        key="bulk_text",
+    )
+    uploaded_file = st.file_uploader("Or upload a .txt file", type=["txt"], key="bulk_file")
+    bulk_submitted = st.button("Add All", key="bulk_submit")
+
+    if bulk_submitted:
+        raw_text = bulk_text or ""
+        if uploaded_file is not None:
+            raw_text = io.StringIO(uploaded_file.read().decode("utf-8", errors="replace")).read()
+
+        tickers = univ.parse_tickers(raw_text)
+        if not tickers:
+            st.warning("No valid ticker symbols found.")
+        else:
+            results: list[tuple[str, bool, str]] = []
+            progress = st.progress(0, text="Starting...")
+            for i, ticker in enumerate(tickers):
+                progress.progress((i + 1) / len(tickers), text=f"Processing {ticker}...")
+                was_present = (
+                    con.execute(
+                        "SELECT COUNT(*) FROM universe WHERE ticker = ?", [ticker]
+                    ).fetchone()[0]
+                    > 0
+                )
+                try:
+                    univ.add_ticker(con, ticker)
+                    msg = "already present, refreshed" if was_present else "added"
+                    results.append((ticker, True, msg))
+                except Exception as exc:
+                    results.append((ticker, False, str(exc)))
+            progress.empty()
+            _clear_cache()
+
+            result_df = pd.DataFrame(results, columns=["Ticker", "OK", "Message"])
+            n_ok = result_df["OK"].sum()
+            n_fail = len(result_df) - n_ok
+            if n_fail == 0:
+                st.success(f"All {n_ok} ticker(s) processed successfully.")
+            else:
+                st.warning(f"{n_ok} succeeded, {n_fail} failed.")
+            st.dataframe(result_df, hide_index=True, width="stretch")
+            st.rerun()
 
     # ---- Per-ticker actions ----
     active_tickers = df[df["active"]]["ticker"].tolist() if not df.empty else []

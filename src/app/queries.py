@@ -484,3 +484,20 @@ def screen_income(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
     from src.screens.trailing import screen_income as _fn
 
     return _fn(con, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 — Sector view
+# ---------------------------------------------------------------------------
+
+
+def sector_summary(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    from src.screens.sectors import sector_summary as _fn
+
+    return _fn(con)
+
+
+def sector_constituents(con: duckdb.DuckDBPyConnection, sector: str) -> pd.DataFrame:
+    from src.screens.sectors import sector_constituents as _fn
+
+    return _fn(con, sector)

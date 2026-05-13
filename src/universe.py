@@ -54,6 +54,44 @@ def list_universe(con: duckdb.DuckDBPyConnection, active_only: bool = True) -> p
     return con.execute(sql).df()
 
 
+def parse_tickers(text: str) -> list[str]:
+    """Return clean ticker list from a newline-delimited string.
+
+    Blank lines and lines starting with '#' are ignored.
+    Each remaining line is stripped and uppercased.
+    """
+    result = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        result.append(stripped.upper())
+    return result
+
+
+def bulk_add_tickers(
+    con: duckdb.DuckDBPyConnection, tickers: list[str]
+) -> list[tuple[str, bool, str]]:
+    """Add multiple tickers, continuing past individual failures.
+
+    Returns a list of (ticker, success, message) tuples.
+    """
+    results = []
+    for ticker in tickers:
+        was_present = (
+            con.execute("SELECT COUNT(*) FROM universe WHERE ticker = ?", [ticker]).fetchone()[0]
+            > 0
+        )
+        try:
+            add_ticker(con, ticker)
+            msg = "already present, refreshed" if was_present else "added"
+            results.append((ticker, True, msg))
+        except Exception as exc:
+            log.warning("bulk_add failed ticker=%s: %s", ticker, exc)
+            results.append((ticker, False, str(exc)))
+    return results
+
+
 def seed_from_config(con: duckdb.DuckDBPyConnection, yaml_path: Path) -> None:
     """Add tickers from a YAML seed file that are not already in the universe table."""
     with yaml_path.open() as f:
