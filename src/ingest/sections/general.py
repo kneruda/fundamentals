@@ -46,10 +46,14 @@ def ingest_highlights(con: duckdb.DuckDBPyConnection, ticker: str, data: dict) -
     if not mrq:
         return
 
+    currency = data.get("General", {}).get("CurrencyCode")
+    if not currency:
+        raise ValueError(f"missing General.CurrencyCode for ticker={ticker!r}")
+
     row = {
         "ticker": ticker,
         "mrq_period_end": mrq,
-        "currency": data.get("General", {}).get("CurrencyCode", "USD"),
+        "currency": currency,
         "revenue_ttm": to_float(h.get("RevenueTTM")),
         "revenue_per_share_ttm": to_float(h.get("RevenuePerShareTTM")),
         "gross_profit_ttm": to_float(h.get("GrossProfitTTM")),

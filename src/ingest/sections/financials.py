@@ -29,7 +29,9 @@ def _parse_periods(
 
 def ingest_financials(con: duckdb.DuckDBPyConnection, ticker: str, data: dict) -> None:
     fin = data.get("Financials", {})
-    currency = data.get("General", {}).get("CurrencyCode", "USD")
+    currency = data.get("General", {}).get("CurrencyCode")
+    if not currency:
+        raise ValueError(f"missing General.CurrencyCode for ticker={ticker!r}")
     pk = ["ticker", "fiscal_period_end", "period_type"]
 
     for section_key, table in [

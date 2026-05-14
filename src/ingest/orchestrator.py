@@ -124,15 +124,24 @@ def _record_load_run(
         log.warning("could not write load_run ticker=%s", ticker)
 
 
-def ingest_universe(con: duckdb.DuckDBPyConnection) -> None:
-    """Fetch and ingest all active tickers in the universe table."""
+def ingest_universe(con: duckdb.DuckDBPyConnection) -> list[tuple[str, bool, str | None]]:
+    """Fetch and ingest all active tickers in the universe table.
+
+    Returns a list of (ticker, success, error_message) tuples so the caller
+    can summarize. Failures are logged but never re-raised — one bad ticker
+    must not break the rest of the load.
+    """
     tickers = [r[0] for r in con.execute("SELECT ticker FROM universe WHERE active").fetchall()]
     log.info("ingesting %d active tickers", len(tickers))
+    results: list[tuple[str, bool, str | None]] = []
     for ticker in tickers:
         try:
             fetch_and_ingest(con, ticker)
-        except Exception:
+            results.append((ticker, True, None))
+        except Exception as exc:
             log.exception("fetch_and_ingest failed ticker=%s", ticker)
+            results.append((ticker, False, str(exc)))
+    return results
 
 
 def _fresh_today(path: Path) -> bool:

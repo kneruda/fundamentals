@@ -29,10 +29,14 @@ def _get(url: str, params: dict, cfg: dict) -> Any:
     base_sleep = cfg.get("retry_base_seconds", 1)
     rps = cfg.get("requests_per_second", 5)
 
+    last_status: int | None = None
+    last_error: str | None = None
     for attempt in range(max_attempts):
         try:
             resp = httpx.get(url, params=params, timeout=30)
             if resp.status_code == 429 or resp.status_code >= 500:
+                last_status = resp.status_code
+                last_error = f"HTTP {resp.status_code}"
                 wait = base_sleep * (2**attempt)
                 log.warning("HTTP %s from %s; retrying in %.1fs", resp.status_code, url, wait)
                 time.sleep(wait)
@@ -41,11 +45,15 @@ def _get(url: str, params: dict, cfg: dict) -> Any:
             time.sleep(1.0 / rps)
             return resp.json()
         except httpx.TransportError as exc:
+            last_error = f"transport error: {exc}"
             wait = base_sleep * (2**attempt)
             log.warning("Transport error (%s); retrying in %.1fs", exc, wait)
             time.sleep(wait)
 
-    raise RuntimeError(f"All {max_attempts} attempts failed for {url}")
+    raise RuntimeError(
+        f"All {max_attempts} attempts failed for {url} "
+        f"(last_status={last_status}, last_error={last_error})"
+    )
 
 
 def fetch_fundamentals(ticker: str) -> dict:

@@ -40,14 +40,13 @@ def screen_consensus_rating_shift(
     if not eligible:
         return pd.DataFrame(), n_excluded
 
-    tickers_sql = ", ".join(f"'{t}'" for t in eligible)
-
-    df = con.execute(f"""
+    placeholders = ", ".join("?" * len(eligible))
+    sql = f"""
         WITH latest AS (
             SELECT ticker, snapshot_date, consensus_rating,
                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY snapshot_date DESC) AS rn
             FROM daily_forward_snapshot
-            WHERE ticker IN ({tickers_sql})
+            WHERE ticker IN ({placeholders})
         ),
         past AS (
             SELECT ticker, snapshot_date, consensus_rating,
@@ -55,11 +54,11 @@ def screen_consensus_rating_shift(
                        PARTITION BY ticker
                        ORDER BY ABS(DATEDIFF('day', snapshot_date,
                            (SELECT MAX(snapshot_date) FROM daily_forward_snapshot WHERE ticker = dfs.ticker)
-                           - {lookback_days})
+                           - ?)
                        )
                    ) AS rn
             FROM daily_forward_snapshot dfs
-            WHERE ticker IN ({tickers_sql})
+            WHERE ticker IN ({placeholders})
         )
         SELECT l.ticker,
                l.consensus_rating AS rating_now,
@@ -70,9 +69,11 @@ def screen_consensus_rating_shift(
         JOIN past p ON l.ticker = p.ticker AND l.rn = 1 AND p.rn = 1
         WHERE l.consensus_rating IS NOT NULL
           AND p.consensus_rating IS NOT NULL
-          AND ABS(l.consensus_rating - p.consensus_rating) >= {min_shift}
+          AND ABS(l.consensus_rating - p.consensus_rating) >= ?
         ORDER BY l.consensus_rating - p.consensus_rating
-    """).df()
+    """
+    params = [*eligible, lookback_days, *eligible, min_shift]
+    df = con.execute(sql, params).df()
 
     df = _add_security_info(con, df)
     if display_filter is not None:
@@ -99,13 +100,12 @@ def screen_target_price_raised(
     if not eligible:
         return pd.DataFrame(), n_excluded
 
-    tickers_sql = ", ".join(f"'{t}'" for t in eligible)
-
-    df = con.execute(f"""
+    placeholders = ", ".join("?" * len(eligible))
+    sql = f"""
         WITH snapshots AS (
             SELECT ticker, snapshot_date, target_price
             FROM daily_forward_snapshot
-            WHERE ticker IN ({tickers_sql}) AND target_price IS NOT NULL
+            WHERE ticker IN ({placeholders}) AND target_price IS NOT NULL
         ),
         latest AS (
             SELECT ticker, snapshot_date AS last_snap, target_price AS tp_now,
@@ -118,7 +118,7 @@ def screen_target_price_raised(
                        PARTITION BY ticker
                        ORDER BY ABS(DATEDIFF('day', snapshot_date,
                            (SELECT MAX(snapshot_date) FROM daily_forward_snapshot WHERE ticker = s.ticker)
-                           - {lookback_days})
+                           - ?)
                        )
                    ) AS rn
             FROM snapshots s
@@ -128,9 +128,11 @@ def screen_target_price_raised(
                l.last_snap
         FROM latest l
         JOIN past p ON l.ticker = p.ticker AND l.rn = 1 AND p.rn = 1
-        WHERE (l.tp_now / NULLIF(p.tp_then, 0) - 1) * 100 >= {min_change_pct}
+        WHERE (l.tp_now / NULLIF(p.tp_then, 0) - 1) * 100 >= ?
         ORDER BY (l.tp_now / NULLIF(p.tp_then, 0) - 1) * 100 DESC
-    """).df()
+    """
+    params = [*eligible, lookback_days, min_change_pct]
+    df = con.execute(sql, params).df()
 
     df = _add_security_info(con, df)
     if display_filter is not None:

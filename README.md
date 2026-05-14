@@ -1,18 +1,17 @@
 # Fundamentals Dashboard
 
-A personal equity fundamentals dashboard powered by EODHD data. Tracks
-valuation, profitability, growth, balance-sheet strength, and analyst
-expectations for a user-managed universe of stocks.
+Personal equity fundamentals dashboard powered by [EODHD](https://eodhd.com/).
+Tracks valuation, profitability, growth, balance-sheet strength, and
+analyst expectations for a user-managed universe of stocks.
 
-See [`AGENTS.md`](AGENTS.md) for design guidance and [`PLAN.md`](PLAN.md)
-for the phased implementation roadmap.
+- **`AGENTS.md`** — design guidance, conventions, anti-patterns.
+- **`PLAN.md`** — what shipped, backlog, decision log.
+- **`REVIEW.md`** — end-of-build code review.
 
----
-
-## Quickstart (local dev)
+## Quickstart
 
 ```bash
-# 1. Install dependencies
+# 1. Install deps
 uv sync
 
 # 2. Configure your EODHD API token
@@ -26,83 +25,78 @@ uv run python scripts/seed_universe.py
 uv run streamlit run src/app/Home.py
 ```
 
-The dashboard opens at http://localhost:8501. Use the **Universe** page to
-add/remove tickers, view load status, and run bulk uploads from there.
+The dashboard opens at <http://localhost:8501>. Use the **Universe** page
+to add/remove tickers, view load status, and run bulk uploads from there.
 
----
-
-## Quickstart (Docker)
+## Docker
 
 ```bash
-# Build images
 docker compose build
-
-# One-shot: seed + daily load
 docker compose run --rm app uv run python scripts/seed_universe.py
 docker compose run --rm app uv run python scripts/load_daily.py
-
-# Long-running: launch the UI
-docker compose up streamlit
+docker compose up streamlit          # UI on :8501
 ```
 
-Or use the Makefile shortcuts:
+Or via Makefile: `make load`, `make ui`, `make shell`, `make test`. Both
+workflows mount `./data` and `./.env` into the container so the
+warehouse and API token are shared.
 
-```bash
-make load    # run load_daily.py via Docker
-make ui      # start Streamlit on port 8501
-make shell   # open a bash shell inside the container
-make test    # run pytest inside the container
-```
+## Pages
 
-Both workflows mount `./data` and `./.env` into the container, so the
-warehouse and API token are shared between host and container.
-
----
+- **Home** — universe summary with conditional formatting.
+- **Deep Dive** — single-ticker valuation history, profitability,
+  analyst snapshot, earnings, dividends, and statements (quarterly /
+  annual; summary / full; B / M / K / raw units).
+- **Universe** — add / remove / refresh / bulk-add tickers; per-ticker
+  load status and price-range; drill-down modal with paginated prices.
+- **Screens** — six trailing screens (absolute valuation, relative to
+  own history, growth, quality, balance sheet, income).
+- **Watchlists** — named subsets of the universe. Active watchlist scopes
+  display across pages; medians/percentiles stay anchored to the full
+  universe.
+- **Sectors** — median trailing metrics per GIC sector with constituent
+  drill-down.
+- **Forward Screens** — vendor-trend screens (EPS revised up, net upward
+  revisions, beat-and-raise) plus snapshot-history screens (consensus
+  rating shift, target price raised; requires ≥30 days of accumulated
+  snapshots).
 
 ## Bulk-loading a large universe
 
-To load hundreds of tickers at once with rate limiting and resumable
-checkpointing:
-
 ```bash
-# Create a text file with one ticker per line (# comments and blank lines ignored)
-uv run python scripts/bulk_load.py --file path/to/tickers.txt
+# tickers.txt: one ticker per line; # comments and blank lines ignored
+uv run python scripts/bulk_load.py --file tickers.txt
 
-# If the job is interrupted, resume it with the printed job ID
+# If the job is interrupted, resume with the printed job ID
 uv run python scripts/bulk_load.py --resume <job_id>
 ```
 
-Default throttle: 20 tickers/min (configurable in `config/settings.yml`
-under `bulk_load.requests_per_minute`). Each ticker makes 2 API calls
-(fundamentals + prices). Adjust upward once you confirm your EODHD tier.
-
----
+Throttling is configurable in `config/settings.yml` under `bulk_load`.
+The shipped value is tuned for our EODHD plan — adjust for yours. Each
+ticker makes 2 API calls (fundamentals + prices) and one call to the
+warehouse.
 
 ## Other scripts
 
 ```bash
-uv run python scripts/add_ticker.py SHOP      # add a single ticker
+uv run python scripts/add_ticker.py SHOP      # add one ticker
 uv run python scripts/load_daily.py           # daily refresh (all active tickers)
-uv run python scripts/rebuild.py              # rebuild warehouse from local raw files
 uv run python scripts/seed_universe.py        # (re-)seed from config/universe.yml
 ```
 
----
-
 ## Scheduling the daily load
 
-Run `scripts/load_daily.py` once per day after US market close. At least
-30 days of analyst snapshots are needed before forward-looking screens
-produce signal.
+Run `scripts/load_daily.py` once per day after US market close.
+Forward-looking history screens accumulate signal after ~30 days of
+daily snapshots per ticker.
 
-> **DuckDB constraint**: only one writer at a time. Schedule loads during
-> quiet hours so they don't conflict with an open Streamlit session.
-> The default cron schedule (02:00 local) avoids this in practice.
+> **DuckDB constraint**: one writer at a time. Schedule loads during
+> quiet hours (default cron is 02:00 local) so they don't conflict with
+> an open Streamlit session.
 
 ### Cron (macOS / Linux)
 
-See [`scripts/cron.example`](scripts/cron.example) for a ready-to-paste
-snippet. Quick setup:
+See [`scripts/cron.example`](scripts/cron.example). Quick setup:
 
 ```bash
 mkdir -p data/logs
@@ -125,7 +119,7 @@ Or without Docker:
 
 ### macOS launchd
 
-Create `~/Library/LaunchAgents/com.fundamentals.load_daily.plist`:
+A `~/Library/LaunchAgents/com.fundamentals.load_daily.plist` skeleton:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -153,32 +147,27 @@ Create `~/Library/LaunchAgents/com.fundamentals.load_daily.plist`:
 </plist>
 ```
 
-Load it: `launchctl load ~/Library/LaunchAgents/com.fundamentals.load_daily.plist`
-
----
+Load it with `launchctl load ~/Library/LaunchAgents/com.fundamentals.load_daily.plist`.
 
 ## Dev commands
 
 ```bash
-uv run pytest                             # run tests
-uv run ruff check . && uv run black --check .   # lint + format check
-uv run python scripts/load_daily.py      # fetch + ingest universe
-uv run python scripts/rebuild.py         # full rebuild from raw (no fetch)
-uv run streamlit run src/app/Home.py     # launch dashboard
+uv run pytest
+uv run ruff check . && uv run black --check .
+uv run streamlit run src/app/Home.py
 ```
-
----
 
 ## Configuration
 
-- **Secrets** (API token): `.env` — never committed. Copy from `.env.example`.
-- **Settings** (paths, throttles, defaults): `config/settings.yml`.
-- **Initial universe**: `config/universe.yml` (seed only; runtime source of
-  truth is the `universe` table in the warehouse).
-
----
+- **Secrets** — `.env`, never committed. Copy from `.env.example`.
+- **Settings** — `config/settings.yml` (paths, throttles, benchmark
+  ticker, archive retention).
+- **Initial universe** — `config/universe.yml`. Seed only; runtime
+  source of truth is the `universe` table.
 
 ## Vendor
 
-Data comes from [EODHD](https://eodhd.com/). The free tier covers the MVP
-universe; higher tiers unlock more fundamentals history and faster rate limits.
+[EODHD](https://eodhd.com/). The free tier covers an MVP universe; paid
+tiers unlock more fundamentals history and faster rate limits. The
+shipped throttles in `config/settings.yml` are tuned for a paid plan —
+tune downward for the free tier or upward for higher tiers.

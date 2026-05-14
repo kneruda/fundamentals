@@ -7,7 +7,6 @@ import datetime
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-from pandas.io.formats.style import Styler
 
 from src.app import queries
 from src.app import sidebar as app_sidebar
@@ -21,6 +20,56 @@ st.set_page_config(
 )
 
 
+_COLUMN_FORMATS: dict[str, str] = {
+    "price": "${:.2f}",
+    "pct_1d": "{:.2f}%",
+    "mktcap_b": "${:.1f}B",
+    "pe_trailing": "{:.1f}",
+    "pe_forward": "{:.1f}",
+    "ps_trailing": "{:.1f}",
+    "pb_trailing": "{:.1f}",
+    "ev_ebitda_trailing": "{:.1f}",
+    "rev_yoy_pct": "{:.1f}%",
+    "eps_yoy_pct": "{:.1f}%",
+    "div_yield_pct": "{:.2f}%",
+    "consensus_rating": "{:.2f}",
+    "target_price": "${:.2f}",
+    "target_upside_pct": "{:.1f}%",
+}
+
+_COLUMN_LABELS: dict[str, str] = {
+    "ticker": "Ticker",
+    "name": "Name",
+    "sector": "Sector",
+    "price": "Price",
+    "pct_1d": "1D %",
+    "mktcap_b": "Mkt Cap ($B)",
+    "pe_trailing": "P/E",
+    "pe_forward": "Fwd P/E",
+    "ps_trailing": "P/S",
+    "pb_trailing": "P/B",
+    "ev_ebitda_trailing": "EV/EBITDA",
+    "rev_yoy_pct": "Rev YoY %",
+    "eps_yoy_pct": "EPS YoY %",
+    "div_yield_pct": "Div Yield %",
+    "consensus_rating": "Rating",
+    "target_price": "Target",
+    "target_upside_pct": "Upside %",
+}
+
+# Columns where higher is better (green on high end).
+_HIGH_GOOD = {"rev_yoy_pct", "eps_yoy_pct", "target_upside_pct", "div_yield_pct"}
+# Columns where lower is better (green on low end). Consensus rating: 1 = Strong Buy.
+_LOW_GOOD = {
+    "pe_trailing",
+    "pe_forward",
+    "ps_trailing",
+    "pb_trailing",
+    "ev_ebitda_trailing",
+    "consensus_rating",
+}
+
+
 @st.cache_resource
 def _get_con():
     return queries.open_warehouse()
@@ -31,40 +80,19 @@ def _universe_summary(_con, mtime: float) -> pd.DataFrame:
     return queries.universe_summary(_con)
 
 
-def _style_table(df: pd.DataFrame) -> Styler:
-    format_map = {
-        "price": "${:.2f}",
-        "pct_1d": "{:.2f}%",
-        "mktcap_b": "${:.1f}B",
-        "pe_trailing": "{:.1f}",
-        "pe_forward": "{:.1f}",
-        "ps_trailing": "{:.1f}",
-        "pb_trailing": "{:.1f}",
-        "ev_ebitda_trailing": "{:.1f}",
-        "rev_yoy_pct": "{:.1f}%",
-        "eps_yoy_pct": "{:.1f}%",
-        "div_yield_pct": "{:.2f}%",
-        "consensus_rating": "{:.2f}",
-        "target_price": "${:.2f}",
-        "target_upside_pct": "{:.1f}%",
-    }
+def _style_table(df: pd.DataFrame):
+    """Apply formatting + conditional gradients on the (already-renamed) display DataFrame."""
+    display_format = {_COLUMN_LABELS.get(k, k): v for k, v in _COLUMN_FORMATS.items()}
+    style = df.style.format(display_format, na_rep="—")
 
-    style = df.style.format(format_map, na_rep="—")
-
-    # Higher is better (green = high)
-    for col in ["rev_yoy_pct", "eps_yoy_pct", "target_upside_pct", "div_yield_pct"]:
+    for col_key in _HIGH_GOOD:
+        col = _COLUMN_LABELS.get(col_key, col_key)
         if col in df.columns and df[col].notna().any():
             style = style.background_gradient(cmap="RdYlGn", subset=[col], axis=0)
-
-    # Lower is better (green = low) for valuation multiples
-    for col in ["pe_trailing", "pe_forward", "ps_trailing", "pb_trailing", "ev_ebitda_trailing"]:
+    for col_key in _LOW_GOOD:
+        col = _COLUMN_LABELS.get(col_key, col_key)
         if col in df.columns and df[col].notna().any():
             style = style.background_gradient(cmap="RdYlGn_r", subset=[col], axis=0)
-
-    # Consensus: 1=Strong Buy (green), 5=Strong Sell (red)
-    if "consensus_rating" in df.columns and df["consensus_rating"].notna().any():
-        style = style.background_gradient(cmap="RdYlGn_r", subset=["consensus_rating"], axis=0)
-
     return style
 
 
@@ -86,81 +114,13 @@ def main() -> None:
         st.info("No active tickers in universe. Add tickers on the Universe page.")
         return
 
-    rename = {
-        "ticker": "Ticker",
-        "name": "Name",
-        "sector": "Sector",
-        "price": "Price",
-        "pct_1d": "1D %",
-        "mktcap_b": "Mkt Cap ($B)",
-        "pe_trailing": "P/E",
-        "pe_forward": "Fwd P/E",
-        "ps_trailing": "P/S",
-        "pb_trailing": "P/B",
-        "ev_ebitda_trailing": "EV/EBITDA",
-        "rev_yoy_pct": "Rev YoY %",
-        "eps_yoy_pct": "EPS YoY %",
-        "div_yield_pct": "Div Yield %",
-        "consensus_rating": "Rating",
-        "target_price": "Target",
-        "target_upside_pct": "Upside %",
-    }
-    display_df = df.rename(columns=rename)
-    display_cols = list(rename.values())
-    # Only keep columns that exist after rename
-    display_cols = [c for c in display_cols if c in display_df.columns]
+    display_df = df.rename(columns=_COLUMN_LABELS)
+    display_cols = [
+        _COLUMN_LABELS[c] for c in _COLUMN_LABELS if _COLUMN_LABELS[c] in display_df.columns
+    ]
+    display_df = display_df[display_cols]
 
-    style = _style_table(df)
-    style = style.set_table_styles([])  # clear defaults so column names render from rename below
-
-    # Apply renamed columns for display (re-apply formatting on renamed df)
-    display_format = {
-        rename.get(k, k): v
-        for k, v in {
-            "price": "${:.2f}",
-            "pct_1d": "{:.2f}%",
-            "mktcap_b": "${:.1f}B",
-            "pe_trailing": "{:.1f}",
-            "pe_forward": "{:.1f}",
-            "ps_trailing": "{:.1f}",
-            "pb_trailing": "{:.1f}",
-            "ev_ebitda_trailing": "{:.1f}",
-            "rev_yoy_pct": "{:.1f}%",
-            "eps_yoy_pct": "{:.1f}%",
-            "div_yield_pct": "{:.2f}%",
-            "consensus_rating": "{:.2f}",
-            "target_price": "${:.2f}",
-            "target_upside_pct": "{:.1f}%",
-        }.items()
-    }
-
-    display_df_subset = display_df[display_cols]
-    display_style = display_df_subset.style.format(display_format, na_rep="—")
-
-    # Gradient on renamed columns
-    for col_orig, col_disp in rename.items():
-        if col_disp not in display_df_subset.columns:
-            continue
-        if not display_df_subset[col_disp].notna().any():
-            continue
-        if col_orig in ("rev_yoy_pct", "eps_yoy_pct", "target_upside_pct", "div_yield_pct"):
-            display_style = display_style.background_gradient(
-                cmap="RdYlGn", subset=[col_disp], axis=0
-            )
-        elif col_orig in (
-            "pe_trailing",
-            "pe_forward",
-            "ps_trailing",
-            "pb_trailing",
-            "ev_ebitda_trailing",
-            "consensus_rating",
-        ):
-            display_style = display_style.background_gradient(
-                cmap="RdYlGn_r", subset=[col_disp], axis=0
-            )
-
-    st.dataframe(display_style, width="stretch", hide_index=True)
-
+    st.dataframe(_style_table(display_df), width="stretch", hide_index=True)
     st.caption("Consensus rating: 1 = Strong Buy | 2 = Buy | 3 = Hold | 4 = Sell | 5 = Strong Sell")
 
 
