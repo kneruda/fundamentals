@@ -1,0 +1,9 @@
+ALTER TABLE analyst_estimates_history ADD COLUMN IF NOT EXISTS eps_trend_current DOUBLE;
+ALTER TABLE analyst_estimates_history ADD COLUMN IF NOT EXISTS eps_trend_7days_ago DOUBLE;
+ALTER TABLE analyst_estimates_history ADD COLUMN IF NOT EXISTS eps_trend_30days_ago DOUBLE;
+ALTER TABLE analyst_estimates_history ADD COLUMN IF NOT EXISTS eps_trend_60days_ago DOUBLE;
+ALTER TABLE analyst_estimates_history ADD COLUMN IF NOT EXISTS eps_trend_90days_ago DOUBLE;
+ALTER TABLE analyst_estimates_history ADD COLUMN IF NOT EXISTS eps_revisions_up_last_7days INTEGER;
+ALTER TABLE analyst_estimates_history ADD COLUMN IF NOT EXISTS eps_revisions_up_last_30days INTEGER;
+ALTER TABLE analyst_estimates_history ADD COLUMN IF NOT EXISTS eps_revisions_down_last_7days INTEGER;
+ALTER TABLE analyst_estimates_history ADD COLUMN IF NOT EXISTS eps_revisions_down_last_30days INTEGER;

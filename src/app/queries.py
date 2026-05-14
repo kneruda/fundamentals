@@ -492,8 +492,10 @@ def statement(
     ).df()
 
     if depth == "full" and "loaded_at" in df.columns:
-        df = df.drop(columns=["loaded_at", "ticker", "period_type", "report_date", "currency"],
-                     errors="ignore")
+        df = df.drop(
+            columns=["loaded_at", "ticker", "period_type", "report_date", "currency"],
+            errors="ignore",
+        )
     return df
 
 
@@ -746,3 +748,68 @@ def fundamentals_recent(
     n: int = 8,
 ) -> pd.DataFrame:
     return statement(con, ticker, statement_type, period_type=period_type, depth="summary", n=n)
+
+
+# ---------------------------------------------------------------------------
+# Phase 13A — Vendor-trend forward screens
+# ---------------------------------------------------------------------------
+
+
+def screen_eps_revised_up(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> pd.DataFrame:
+    from src.screens.forward_vendor import screen_eps_revised_up as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_net_upward_eps_revisions(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> pd.DataFrame:
+    from src.screens.forward_vendor import screen_net_upward_eps_revisions as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_beat_and_revise(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> pd.DataFrame:
+    from src.screens.forward_vendor import screen_beat_and_revise as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Phase 13B — Snapshot-history forward screens
+# ---------------------------------------------------------------------------
+
+
+def screen_consensus_rating_shift(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> tuple[pd.DataFrame, int]:
+    from src.screens.forward_history import screen_consensus_rating_shift as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_target_price_raised(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> tuple[pd.DataFrame, int]:
+    from src.screens.forward_history import screen_target_price_raised as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)

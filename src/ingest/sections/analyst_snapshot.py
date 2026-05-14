@@ -64,6 +64,15 @@ def ingest_analyst_snapshot(
             "revenue_num_analysts": to_int(entry.get("revenueEstimateNumberOfAnalysts")),
             "revenue_growth": to_float(entry.get("revenueEstimateGrowth")),
             "currency": currency,
+            "eps_trend_current": to_float(entry.get("epsTrendCurrent")),
+            "eps_trend_7days_ago": to_float(entry.get("epsTrend7daysAgo")),
+            "eps_trend_30days_ago": to_float(entry.get("epsTrend30daysAgo")),
+            "eps_trend_60days_ago": to_float(entry.get("epsTrend60daysAgo")),
+            "eps_trend_90days_ago": to_float(entry.get("epsTrend90daysAgo")),
+            "eps_revisions_up_last_7days": to_int(entry.get("epsRevisionsUpLast7days")),
+            "eps_revisions_up_last_30days": to_int(entry.get("epsRevisionsUpLast30days")),
+            "eps_revisions_down_last_7days": to_int(entry.get("epsRevisionsDownLast7days")),
+            "eps_revisions_down_last_30days": to_int(entry.get("epsRevisionsDownLast30days")),
         }
         for entry in data.get("Earnings", {}).get("Trend", {}).values()
     ]

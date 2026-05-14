@@ -455,7 +455,7 @@ prices in <500ms, and can flip to fundamentals without re-fetching prices.
 
 ---
 
-## Phase 13 — Forward-looking screens
+## Phase 13 — Forward-looking screens ✓ DONE
 
 **Deliverable**: a Forward Screens page with screens grouped into "Vendor
 trends (works immediately)" and "Snapshot history (≥30 days)."
@@ -529,6 +529,35 @@ fields are zero-cost to store and the only blocker to vendor-trend screens.
 **Done when**: 13A screens are immediately useful on day 1 of the phase;
 13B screens are wired up and waiting for the snapshot table to accumulate
 30+ days for the relevant tickers.
+
+### Phase 13 implementation notes
+
+**13A (vendor trends — immediately useful)**:
+- Migration `005_analyst_estimates_trend_cols.sql` adds 9 columns to
+  `analyst_estimates_history`: `eps_trend_{current,7days_ago,30days_ago,
+  60days_ago,90days_ago}` and `eps_revisions_{up,down}_last_{7,30}days`.
+- `src/ingest/sections/analyst_snapshot.py` now maps the corresponding
+  camelCase vendor fields (`epsTrendCurrent`, `epsRevisionsUpLast7days`, etc.)
+  into these columns.
+- Re-ingesting all 507 raw fundamentals files populated the new columns
+  for existing snapshot rows.
+- Revenue revision fields do not exist in the EODHD `Earnings.Trend` endpoint;
+  only EPS revision counts are available.
+- `eps_trend_30days_ago == 0` rows are excluded before computing the delta
+  percentage to prevent infinite values.
+
+**13B (snapshot history — gates until ≥30 days accumulated)**:
+- Screens expose `(result_df, n_excluded)` tuples; the UI surfaces the
+  excluded count as an info banner.
+- The SQL uses `ABS(DATEDIFF('day', snapshot_date, max_snap_date - N))`
+  to find the snapshot closest to N days ago per ticker.
+
+**New files**:
+- `src/schema/migrations/005_analyst_estimates_trend_cols.sql`
+- `src/screens/forward_vendor.py` — 13A screens (3 functions)
+- `src/screens/forward_history.py` — 13B screens (2 functions)
+- `src/app/pages/6_Forward_Screens.py` — UI page
+- `tests/test_phase13.py` — 16 tests, all pass
 
 ---
 
