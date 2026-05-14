@@ -47,9 +47,14 @@ def sector_summary(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """).df()
 
 
-def sector_constituents(con: duckdb.DuckDBPyConnection, sector: str) -> pd.DataFrame:
+def sector_constituents(
+    con: duckdb.DuckDBPyConnection,
+    sector: str,
+    *,
+    display_filter: list[str] | None = None,
+) -> pd.DataFrame:
     """Individual ticker metrics for a sector."""
-    return con.execute("""
+    df = con.execute("""
         WITH latest_mult AS (
             SELECT tm.*
             FROM trailing_multiples_daily tm
@@ -98,3 +103,6 @@ def sector_constituents(con: duckdb.DuckDBPyConnection, sector: str) -> pd.DataF
           AND COALESCE(sm.gic_sector, sm.sector, 'Unknown') = ?
         ORDER BY sm.name NULLS LAST, u.ticker
     """, [sector]).df()
+    if display_filter is not None:
+        df = df[df["ticker"].isin(display_filter)]
+    return df.reset_index(drop=True)

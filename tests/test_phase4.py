@@ -67,9 +67,9 @@ def insert_shares(con, ticker, period_end, shares):
 def insert_income_stmt(con, ticker, fiscal_period_end, report_date, total_revenue, ebitda):
     con.execute(
         "INSERT INTO income_statement"
-        " (ticker, fiscal_period_end, report_date, currency, total_revenue, ebitda)"
-        " VALUES (?, ?, ?, 'USD', ?, ?)"
-        " ON CONFLICT (ticker, fiscal_period_end) DO UPDATE SET"
+        " (ticker, fiscal_period_end, period_type, report_date, currency, total_revenue, ebitda)"
+        " VALUES (?, ?, 'quarterly', ?, 'USD', ?, ?)"
+        " ON CONFLICT (ticker, fiscal_period_end, period_type) DO UPDATE SET"
         "   report_date = excluded.report_date,"
         "   total_revenue = excluded.total_revenue, ebitda = excluded.ebitda",
         [ticker, fiscal_period_end, report_date, total_revenue, ebitda],
@@ -81,11 +81,11 @@ def insert_balance_sheet(
 ):
     con.execute(
         "INSERT INTO balance_sheet"
-        " (ticker, fiscal_period_end, report_date, currency,"
+        " (ticker, fiscal_period_end, period_type, report_date, currency,"
         "  total_stockholder_equity, common_stock_shares_outstanding,"
         "  long_term_debt_total, short_term_debt, cash_and_short_term_investments)"
-        " VALUES (?, ?, ?, 'USD', ?, ?, ?, ?, ?)"
-        " ON CONFLICT (ticker, fiscal_period_end) DO UPDATE SET"
+        " VALUES (?, ?, 'quarterly', ?, 'USD', ?, ?, ?, ?, ?)"
+        " ON CONFLICT (ticker, fiscal_period_end, period_type) DO UPDATE SET"
         "   report_date = excluded.report_date,"
         "   total_stockholder_equity = excluded.total_stockholder_equity,"
         "   common_stock_shares_outstanding = excluded.common_stock_shares_outstanding,"
@@ -99,9 +99,9 @@ def insert_balance_sheet(
 def insert_cashflow(con, ticker, fiscal_period_end, report_date, fcf):
     con.execute(
         "INSERT INTO cash_flow"
-        " (ticker, fiscal_period_end, report_date, currency, free_cash_flow)"
-        " VALUES (?, ?, ?, 'USD', ?)"
-        " ON CONFLICT (ticker, fiscal_period_end) DO UPDATE SET"
+        " (ticker, fiscal_period_end, period_type, report_date, currency, free_cash_flow)"
+        " VALUES (?, ?, 'quarterly', ?, 'USD', ?)"
+        " ON CONFLICT (ticker, fiscal_period_end, period_type) DO UPDATE SET"
         "   report_date = excluded.report_date, free_cash_flow = excluded.free_cash_flow",
         [ticker, fiscal_period_end, report_date, fcf],
     )

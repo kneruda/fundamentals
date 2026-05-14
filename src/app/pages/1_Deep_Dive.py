@@ -57,18 +57,8 @@ def _dividends_annual(_con, ticker: str, mtime: float) -> pd.DataFrame:
 
 
 @st.cache_data
-def _is_history(_con, ticker: str, mtime: float) -> pd.DataFrame:
-    return queries.income_statement_history(_con, ticker)
-
-
-@st.cache_data
-def _bs_history(_con, ticker: str, mtime: float) -> pd.DataFrame:
-    return queries.balance_sheet_history(_con, ticker)
-
-
-@st.cache_data
-def _cf_history(_con, ticker: str, mtime: float) -> pd.DataFrame:
-    return queries.cash_flow_history(_con, ticker)
+def _statement(_con, ticker: str, stmt_type: str, period_type: str, depth: str, mtime: float) -> pd.DataFrame:
+    return queries.statement(_con, ticker, stmt_type, period_type=period_type, depth=depth)
 
 
 def _fmt(val, fmt: str = "{:.2f}", fallback: str = "—") -> str:
@@ -96,9 +86,23 @@ def _statements_display(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _scale_billions(df: pd.DataFrame) -> pd.DataFrame:
-    """Scale monetary columns to billions in-place."""
-    return df / 1e9
+_UNITS: dict[str, tuple[float, str]] = {
+    "Billions": (1e9, "B"),
+    "Millions": (1e6, "M"),
+    "Thousands": (1e3, "K"),
+    "Raw": (1.0, ""),
+}
+
+
+def _apply_units(df: pd.DataFrame, divisor: float, suffix: str) -> pd.DataFrame:
+    """Divide all numeric cells by divisor and format with suffix."""
+    def _fmt(v: object) -> str:
+        if pd.isna(v) or not isinstance(v, (int, float)):
+            return "—"
+        scaled = v / divisor
+        return f"${scaled:,.2f}{suffix}" if suffix else f"{scaled:,.0f}"
+
+    return df.map(_fmt)
 
 
 def main() -> None:
@@ -447,76 +451,80 @@ def main() -> None:
     # Statements tab
     # -------------------------------------------------------------------------
     with tab_stmts:
+        ctrl1, ctrl2, ctrl3 = st.columns(3)
+        with ctrl1:
+            period_label = st.radio("Period", ["Quarterly", "Annual"], horizontal=True)
+        with ctrl2:
+            depth_label = st.radio("Depth", ["Summary", "Full"], horizontal=True)
+        with ctrl3:
+            units_label = st.radio("Units", list(_UNITS), horizontal=True)
+
+        period_type = "quarterly" if period_label == "Quarterly" else "annual"
+        depth = depth_label.lower()
+        divisor, suffix = _UNITS[units_label]
+        n_periods = 8 if period_type == "quarterly" else 5
+
+        _IS_LABELS = {
+            "total_revenue": "Revenue",
+            "gross_profit": "Gross Profit",
+            "ebitda": "EBITDA",
+            "operating_income": "Operating Income",
+            "net_income": "Net Income",
+            "interest_expense": "Interest Expense",
+            "research_development": "R&D",
+        }
+        _BS_LABELS = {
+            "cash_and_short_term_investments": "Cash & ST Investments",
+            "total_current_assets": "Total Current Assets",
+            "total_assets": "Total Assets",
+            "total_current_liabilities": "Total Current Liabilities",
+            "long_term_debt_total": "Long-Term Debt",
+            "short_term_debt": "Short-Term Debt",
+            "total_stockholder_equity": "Stockholder Equity",
+            "net_debt": "Net Debt (computed)",
+        }
+        _CF_LABELS = {
+            "total_cash_from_operating_activities": "Operating CF",
+            "capital_expenditures": "CapEx",
+            "free_cash_flow": "Free Cash Flow",
+            "dividends_paid": "Dividends Paid",
+            "net_borrowings": "Net Borrowings",
+        }
+
         sub_is, sub_bs, sub_cf = st.tabs(["Income Statement", "Balance Sheet", "Cash Flow"])
 
         with sub_is:
-            is_df = _is_history(con, ticker, mtime)
+            is_df = _statement(con, ticker, "income_statement", period_type, depth, mtime)
             if not is_df.empty:
                 display = _statements_display(is_df)
-                # Scale to billions
-                display = display.map(
-                    lambda v: (
-                        f"${v/1e9:.2f}B" if pd.notna(v) and isinstance(v, (int, float)) else "—"
-                    )
-                )
-                labels = {
-                    "total_revenue": "Revenue",
-                    "gross_profit": "Gross Profit",
-                    "ebitda": "EBITDA",
-                    "operating_income": "Operating Income",
-                    "net_income": "Net Income",
-                    "interest_expense": "Interest Expense",
-                    "research_development": "R&D",
-                }
-                display.index = [labels.get(i, i) for i in display.index]
+                display = _apply_units(display, divisor, suffix)
+                if depth == "summary":
+                    display.index = [_IS_LABELS.get(i, i) for i in display.index]
                 st.dataframe(display, width="stretch")
             else:
-                st.info("No income statement data.")
+                st.info(f"No {period_label.lower()} income statement data.")
 
         with sub_bs:
-            bs_df = _bs_history(con, ticker, mtime)
+            bs_df = _statement(con, ticker, "balance_sheet", period_type, depth, mtime)
             if not bs_df.empty:
                 display = _statements_display(bs_df)
-                display = display.map(
-                    lambda v: (
-                        f"${v/1e9:.2f}B" if pd.notna(v) and isinstance(v, (int, float)) else "—"
-                    )
-                )
-                labels = {
-                    "cash_and_short_term_investments": "Cash & ST Investments",
-                    "total_current_assets": "Total Current Assets",
-                    "total_assets": "Total Assets",
-                    "total_current_liabilities": "Total Current Liabilities",
-                    "long_term_debt_total": "Long-Term Debt",
-                    "short_term_debt": "Short-Term Debt",
-                    "total_stockholder_equity": "Stockholder Equity",
-                    "net_debt": "Net Debt (computed)",
-                }
-                display.index = [labels.get(i, i) for i in display.index]
+                display = _apply_units(display, divisor, suffix)
+                if depth == "summary":
+                    display.index = [_BS_LABELS.get(i, i) for i in display.index]
                 st.dataframe(display, width="stretch")
             else:
-                st.info("No balance sheet data.")
+                st.info(f"No {period_label.lower()} balance sheet data.")
 
         with sub_cf:
-            cf_df = _cf_history(con, ticker, mtime)
+            cf_df = _statement(con, ticker, "cash_flow", period_type, depth, mtime)
             if not cf_df.empty:
                 display = _statements_display(cf_df)
-                display = display.map(
-                    lambda v: (
-                        f"${v/1e9:.2f}B" if pd.notna(v) and isinstance(v, (int, float)) else "—"
-                    )
-                )
-                labels = {
-                    "total_cash_from_operating_activities": "Operating CF",
-                    "capital_expenditures": "CapEx",
-                    "free_cash_flow": "Free Cash Flow",
-                    "dividends_paid": "Dividends Paid",
-                    "net_borrowings": "Net Borrowings",
-                }
-                display.index = [labels.get(i, i) for i in display.index]
+                display = _apply_units(display, divisor, suffix)
+                if depth == "summary":
+                    display.index = [_CF_LABELS.get(i, i) for i in display.index]
                 st.dataframe(display, width="stretch")
             else:
-                st.info("No cash flow data.")
+                st.info(f"No {period_label.lower()} cash flow data.")
 
 
 main()

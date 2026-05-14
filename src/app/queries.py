@@ -228,10 +228,16 @@ def quarterly_metrics(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 12) 
             stmt.net_income / NULLIF(bs.total_stockholder_equity, 0) * 100   AS roe_pct
         FROM income_statement stmt
         LEFT JOIN cash_flow cf
-            ON stmt.ticker = cf.ticker AND stmt.fiscal_period_end = cf.fiscal_period_end
+            ON stmt.ticker = cf.ticker
+           AND stmt.fiscal_period_end = cf.fiscal_period_end
+           AND cf.period_type = 'quarterly'
         LEFT JOIN balance_sheet bs
-            ON stmt.ticker = bs.ticker AND stmt.fiscal_period_end = bs.fiscal_period_end
-        WHERE stmt.ticker = ? AND stmt.total_revenue IS NOT NULL
+            ON stmt.ticker = bs.ticker
+           AND stmt.fiscal_period_end = bs.fiscal_period_end
+           AND bs.period_type = 'quarterly'
+        WHERE stmt.ticker = ?
+          AND stmt.period_type = 'quarterly'
+          AND stmt.total_revenue IS NOT NULL
         ORDER BY stmt.fiscal_period_end DESC
         LIMIT ?
     """,
@@ -345,8 +351,43 @@ def dividend_annual_history(con: duckdb.DuckDBPyConnection, ticker: str) -> pd.D
 # ---------------------------------------------------------------------------
 
 
+_IS_SUMMARY_COLS = [
+    "fiscal_period_end",
+    "total_revenue",
+    "gross_profit",
+    "ebitda",
+    "operating_income",
+    "net_income",
+    "interest_expense",
+    "research_development",
+]
+
+_BS_SUMMARY_COLS = [
+    "fiscal_period_end",
+    "cash_and_short_term_investments",
+    "total_current_assets",
+    "total_assets",
+    "total_current_liabilities",
+    "long_term_debt_total",
+    "short_term_debt",
+    "total_stockholder_equity",
+]
+
+_CF_SUMMARY_COLS = [
+    "fiscal_period_end",
+    "total_cash_from_operating_activities",
+    "capital_expenditures",
+    "free_cash_flow",
+    "dividends_paid",
+    "net_borrowings",
+]
+
+
 def income_statement_history(
-    con: duckdb.DuckDBPyConnection, ticker: str, n: int = 8
+    con: duckdb.DuckDBPyConnection,
+    ticker: str,
+    n: int = 8,
+    period_type: str = "quarterly",
 ) -> pd.DataFrame:
     return con.execute(
         """
@@ -354,15 +395,20 @@ def income_statement_history(
                operating_income, net_income, interest_expense,
                research_development
         FROM income_statement
-        WHERE ticker = ?
+        WHERE ticker = ? AND period_type = ?
         ORDER BY fiscal_period_end DESC
         LIMIT ?
     """,
-        [ticker, n],
+        [ticker, period_type, n],
     ).df()
 
 
-def balance_sheet_history(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 8) -> pd.DataFrame:
+def balance_sheet_history(
+    con: duckdb.DuckDBPyConnection,
+    ticker: str,
+    n: int = 8,
+    period_type: str = "quarterly",
+) -> pd.DataFrame:
     return con.execute(
         """
         SELECT fiscal_period_end,
@@ -374,27 +420,81 @@ def balance_sheet_history(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 
                (COALESCE(long_term_debt_total, 0) + COALESCE(short_term_debt, 0)
                 - COALESCE(cash_and_short_term_investments, 0)) AS net_debt
         FROM balance_sheet
-        WHERE ticker = ?
+        WHERE ticker = ? AND period_type = ?
         ORDER BY fiscal_period_end DESC
         LIMIT ?
     """,
-        [ticker, n],
+        [ticker, period_type, n],
     ).df()
 
 
-def cash_flow_history(con: duckdb.DuckDBPyConnection, ticker: str, n: int = 8) -> pd.DataFrame:
+def cash_flow_history(
+    con: duckdb.DuckDBPyConnection,
+    ticker: str,
+    n: int = 8,
+    period_type: str = "quarterly",
+) -> pd.DataFrame:
     return con.execute(
         """
         SELECT fiscal_period_end,
                total_cash_from_operating_activities, capital_expenditures,
                free_cash_flow, dividends_paid, net_borrowings
         FROM cash_flow
-        WHERE ticker = ?
+        WHERE ticker = ? AND period_type = ?
         ORDER BY fiscal_period_end DESC
         LIMIT ?
     """,
-        [ticker, n],
+        [ticker, period_type, n],
     ).df()
+
+
+def statement(
+    con: duckdb.DuckDBPyConnection,
+    ticker: str,
+    statement_type: str,
+    period_type: str = "quarterly",
+    depth: str = "summary",
+    n: int = 8,
+) -> pd.DataFrame:
+    """Return a financial statement as a DataFrame.
+
+    statement_type: 'income_statement' | 'balance_sheet' | 'cash_flow'
+    period_type: 'quarterly' | 'annual'
+    depth: 'summary' (curated columns) | 'full' (all columns)
+    """
+    summary_cols: dict[str, list[str]] = {
+        "income_statement": _IS_SUMMARY_COLS,
+        "balance_sheet": _BS_SUMMARY_COLS,
+        "cash_flow": _CF_SUMMARY_COLS,
+    }
+    if depth == "summary":
+        cols = summary_cols.get(statement_type, ["fiscal_period_end"])
+        # balance_sheet summary adds a computed net_debt column
+        if statement_type == "balance_sheet":
+            select = ", ".join(f'"{c}"' for c in cols) + (
+                ", (COALESCE(long_term_debt_total, 0) + COALESCE(short_term_debt, 0)"
+                " - COALESCE(cash_and_short_term_investments, 0)) AS net_debt"
+            )
+        else:
+            select = ", ".join(f'"{c}"' for c in cols)
+    else:
+        select = "*"
+
+    df = con.execute(
+        f"""
+        SELECT {select}
+        FROM {statement_type}
+        WHERE ticker = ? AND period_type = ?
+        ORDER BY fiscal_period_end DESC
+        LIMIT ?
+        """,
+        [ticker, period_type, n],
+    ).df()
+
+    if depth == "full" and "loaded_at" in df.columns:
+        df = df.drop(columns=["loaded_at", "ticker", "period_type", "report_date", "currency"],
+                     errors="ignore")
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -450,6 +550,23 @@ def active_tickers(con: duckdb.DuckDBPyConnection) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Phase 10 — Watchlists
+# ---------------------------------------------------------------------------
+
+
+def list_watchlists(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    from src.watchlist import list_watchlists as _fn
+
+    return _fn(con)
+
+
+def get_watchlist_membership(con: duckdb.DuckDBPyConnection, watchlist_id: int) -> list[str]:
+    from src.watchlist import get_membership
+
+    return get_membership(con, watchlist_id)
+
+
+# ---------------------------------------------------------------------------
 # Phase 6 — snapshot coverage
 # ---------------------------------------------------------------------------
 
@@ -476,40 +593,70 @@ def snapshot_coverage(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def screen_absolute_valuation(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+def screen_absolute_valuation(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> pd.DataFrame:
     from src.screens.trailing import screen_absolute_valuation as _fn
 
-    return _fn(con, **kwargs)
+    return _fn(con, display_filter=display_filter, **kwargs)
 
 
-def screen_relative_history(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+def screen_relative_history(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> pd.DataFrame:
     from src.screens.trailing import screen_relative_history as _fn
 
-    return _fn(con, **kwargs)
+    return _fn(con, display_filter=display_filter, **kwargs)
 
 
-def screen_growth(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+def screen_growth(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> pd.DataFrame:
     from src.screens.trailing import screen_growth as _fn
 
-    return _fn(con, **kwargs)
+    return _fn(con, display_filter=display_filter, **kwargs)
 
 
-def screen_quality(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+def screen_quality(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> pd.DataFrame:
     from src.screens.trailing import screen_quality as _fn
 
-    return _fn(con, **kwargs)
+    return _fn(con, display_filter=display_filter, **kwargs)
 
 
-def screen_balance_sheet(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+def screen_balance_sheet(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> pd.DataFrame:
     from src.screens.trailing import screen_balance_sheet as _fn
 
-    return _fn(con, **kwargs)
+    return _fn(con, display_filter=display_filter, **kwargs)
 
 
-def screen_income(con: duckdb.DuckDBPyConnection, **kwargs) -> pd.DataFrame:
+def screen_income(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    display_filter: list[str] | None = None,
+    **kwargs,
+) -> pd.DataFrame:
     from src.screens.trailing import screen_income as _fn
 
-    return _fn(con, **kwargs)
+    return _fn(con, display_filter=display_filter, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -523,7 +670,12 @@ def sector_summary(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     return _fn(con)
 
 
-def sector_constituents(con: duckdb.DuckDBPyConnection, sector: str) -> pd.DataFrame:
+def sector_constituents(
+    con: duckdb.DuckDBPyConnection,
+    sector: str,
+    *,
+    display_filter: list[str] | None = None,
+) -> pd.DataFrame:
     from src.screens.sectors import sector_constituents as _fn
 
-    return _fn(con, sector)
+    return _fn(con, sector, display_filter=display_filter)

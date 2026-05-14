@@ -214,7 +214,7 @@ cron via Docker; the Universe page surfaces load status for every ticker.
 
 ---
 
-## Phase 10 — Watchlists and portfolios (schema)
+## Phase 10 — Watchlists and portfolios (schema) ✓ DONE
 
 **Deliverable**: users can group subsets of the universe into named
 watchlists, optionally attach share counts (portfolio mode), select an

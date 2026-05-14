@@ -3,6 +3,8 @@
 import streamlit as st
 
 from src.app import queries
+from src.app import sidebar as app_sidebar
+from src.watchlist import create_watchlist
 
 st.set_page_config(page_title="Screens", layout="wide")
 
@@ -221,6 +223,8 @@ def _fmt_df(df):
 def main() -> None:
     con = _get_con()
 
+    display_filter = app_sidebar.watchlist_selector(con)
+
     st.title("Screens")
 
     screen_name = st.sidebar.selectbox("Screen", list(_SCREENS.keys()), key="screen_sel")
@@ -234,7 +238,7 @@ def main() -> None:
     st.caption(_DESCRIPTIONS[screen_key])
 
     screen_fn = getattr(queries, f"screen_{screen_key}")
-    df = screen_fn(con, **kwargs)
+    df = screen_fn(con, display_filter=display_filter, **kwargs)
 
     if df.empty:
         st.info("No tickers match the current filters.")
@@ -242,6 +246,22 @@ def main() -> None:
         st.dataframe(_fmt_df(df), hide_index=True, width="stretch")
 
     st.caption(f"{len(df)} ticker(s) match.")
+
+    # Save current results as a watchlist
+    if not df.empty:
+        st.markdown("---")
+        with st.expander("Save these results as a watchlist"):
+            wl_name = st.text_input("Watchlist name", key="save_wl_name")
+            if st.button("Save", key="save_wl_btn"):
+                if not wl_name.strip():
+                    st.error("Watchlist name is required.")
+                else:
+                    try:
+                        tickers = df["ticker"].tolist()
+                        create_watchlist(con, wl_name.strip(), tickers)
+                        st.success(f"Saved '{wl_name}' with {len(tickers)} ticker(s).")
+                    except Exception as exc:
+                        st.error(str(exc))
 
 
 main()

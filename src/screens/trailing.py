@@ -12,6 +12,7 @@ def screen_absolute_valuation(
     max_pb: float | None = None,
     max_ev_ebitda: float | None = None,
     min_fcf_yield: float | None = None,
+    display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Active tickers passing absolute multiple thresholds."""
     df = con.execute("""
@@ -46,6 +47,8 @@ def screen_absolute_valuation(
         df = df[df["ev_ebitda_trailing"].notna() & (df["ev_ebitda_trailing"] <= max_ev_ebitda)]
     if min_fcf_yield is not None:
         df = df[df["fcf_yield_pct"].notna() & (df["fcf_yield_pct"] >= min_fcf_yield)]
+    if display_filter is not None:
+        df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)
 
 
@@ -57,6 +60,7 @@ def screen_relative_history(
     max_ev_rank: float | None = None,
     max_ps_rank: float | None = None,
     min_history_days: int = 0,
+    display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Tickers whose current multiples are cheap vs. their own history.
 
@@ -111,6 +115,8 @@ def screen_relative_history(
         df = df[df["ev_pct_rank"].notna() & (df["ev_pct_rank"] <= max_ev_rank)]
     if max_ps_rank is not None:
         df = df[df["ps_pct_rank"].notna() & (df["ps_pct_rank"] <= max_ps_rank)]
+    if display_filter is not None:
+        df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)
 
 
@@ -120,6 +126,7 @@ def screen_growth(
     min_rev_yoy: float | None = None,
     min_eps_yoy: float | None = None,
     require_acceleration: bool = False,
+    display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Tickers with strong revenue/EPS growth and optional acceleration filter."""
     df = con.execute("""
@@ -170,6 +177,8 @@ def screen_growth(
         df = df[df["eps_yoy_pct"].notna() & (df["eps_yoy_pct"] >= min_eps_yoy)]
     if require_acceleration:
         df = df[df["is_accelerating"] == True]  # noqa: E712
+    if display_filter is not None:
+        df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)
 
 
@@ -181,6 +190,7 @@ def screen_quality(
     min_gross_margin: float | None = None,
     min_fcf_conversion: float | None = None,
     require_margin_expansion: bool = False,
+    display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Tickers with high returns, wide margins, and strong FCF conversion.
 
@@ -282,6 +292,8 @@ def screen_quality(
         df = df[df["fcf_conversion_pct"].notna() & (df["fcf_conversion_pct"] >= min_fcf_conversion)]
     if require_margin_expansion:
         df = df[df["margin_expanding"] == True]  # noqa: E712
+    if display_filter is not None:
+        df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)
 
 
@@ -291,6 +303,7 @@ def screen_balance_sheet(
     max_net_debt_ebitda: float | None = None,
     min_interest_coverage: float | None = None,
     min_current_ratio: float | None = None,
+    display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Tickers with strong balance sheets — low leverage, solid coverage, ample liquidity."""
     df = con.execute("""
@@ -347,6 +360,8 @@ def screen_balance_sheet(
         ]
     if min_current_ratio is not None:
         df = df[df["current_ratio"].notna() & (df["current_ratio"] >= min_current_ratio)]
+    if display_filter is not None:
+        df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)
 
 
@@ -356,6 +371,7 @@ def screen_income(
     min_yield: float | None = None,
     max_payout: float | None = None,
     min_div_years: int | None = None,
+    display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Dividend payers with sufficient yield, sustainable payout, and history."""
     df = con.execute("""
@@ -390,4 +406,6 @@ def screen_income(
         df = df[df["payout_ratio_pct"].notna() & (df["payout_ratio_pct"] <= max_payout)]
     if min_div_years is not None:
         df = df[df["n_div_years"].notna() & (df["n_div_years"] >= min_div_years)]
+    if display_filter is not None:
+        df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)

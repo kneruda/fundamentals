@@ -185,10 +185,15 @@ def test_quarterly_fundamentals_values(loaded_db):
 
 
 def test_balance_sheet_row_count(loaded_db):
-    count = loaded_db.execute("SELECT COUNT(*) FROM balance_sheet WHERE ticker='AAPL'").fetchone()[
-        0
-    ]
-    assert count == 163
+    # Phase 11: now ingests both quarterly and annual rows
+    q_count = loaded_db.execute(
+        "SELECT COUNT(*) FROM balance_sheet WHERE ticker='AAPL' AND period_type='quarterly'"
+    ).fetchone()[0]
+    assert q_count == 163
+    a_count = loaded_db.execute(
+        "SELECT COUNT(*) FROM balance_sheet WHERE ticker='AAPL' AND period_type='annual'"
+    ).fetchone()[0]
+    assert a_count > 0
 
 
 def test_balance_sheet_report_date(loaded_db):
@@ -231,10 +236,15 @@ def test_balance_sheet_vendor_typo_fields(loaded_db):
 
 
 def test_income_statement_row_count(loaded_db):
-    count = loaded_db.execute(
-        "SELECT COUNT(*) FROM income_statement WHERE ticker='AAPL'"
+    # Phase 11: now ingests both quarterly and annual rows
+    q_count = loaded_db.execute(
+        "SELECT COUNT(*) FROM income_statement WHERE ticker='AAPL' AND period_type='quarterly'"
     ).fetchone()[0]
-    assert count == 163
+    assert q_count == 163
+    a_count = loaded_db.execute(
+        "SELECT COUNT(*) FROM income_statement WHERE ticker='AAPL' AND period_type='annual'"
+    ).fetchone()[0]
+    assert a_count > 0
 
 
 def test_income_statement_null_optional_fields(loaded_db):
@@ -248,8 +258,15 @@ def test_income_statement_null_optional_fields(loaded_db):
 
 
 def test_cash_flow_row_count(loaded_db):
-    count = loaded_db.execute("SELECT COUNT(*) FROM cash_flow WHERE ticker='AAPL'").fetchone()[0]
-    assert count == 146  # CF history is shorter than BS/IS for AAPL
+    # Phase 11: now ingests both quarterly and annual rows
+    q_count = loaded_db.execute(
+        "SELECT COUNT(*) FROM cash_flow WHERE ticker='AAPL' AND period_type='quarterly'"
+    ).fetchone()[0]
+    assert q_count == 146  # CF history is shorter than BS/IS for AAPL
+    a_count = loaded_db.execute(
+        "SELECT COUNT(*) FROM cash_flow WHERE ticker='AAPL' AND period_type='annual'"
+    ).fetchone()[0]
+    assert a_count > 0
 
 
 # ---------------------------------------------------------------------------

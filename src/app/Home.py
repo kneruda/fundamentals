@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from pandas.io.formats.style import Styler
 
 from src.app import queries
+from src.app import sidebar as app_sidebar
 
 load_dotenv()
 
@@ -72,10 +73,14 @@ def main() -> None:
     mtime = queries.warehouse_mtime()
     updated = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M") if mtime else "—"
 
+    display_filter = app_sidebar.watchlist_selector(con)
+
     st.title("Fundamentals Dashboard")
     st.caption(f"Warehouse last updated: {updated}")
 
     df = _universe_summary(con, mtime)
+    if display_filter is not None:
+        df = df[df["ticker"].isin(display_filter)].reset_index(drop=True)
 
     if df.empty:
         st.info("No active tickers in universe. Add tickers on the Universe page.")

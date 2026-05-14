@@ -3,6 +3,7 @@
 import streamlit as st
 
 from src.app import queries
+from src.app import sidebar as app_sidebar
 
 st.set_page_config(page_title="Sectors", layout="wide")
 
@@ -65,8 +66,13 @@ def main() -> None:
     con = _get_con()
     mtime = queries.warehouse_mtime()
 
+    display_filter = app_sidebar.watchlist_selector(con)
+
     st.title("Sectors")
-    st.caption("Median trailing metrics by GIC sector. Click a sector to expand constituents.")
+    st.caption(
+        "Median trailing metrics by GIC sector (full universe). "
+        "Drill-down constituents are filtered by active watchlist."
+    )
 
     summary = _sector_summary(con, mtime)
 
@@ -74,7 +80,7 @@ def main() -> None:
         st.info("No active tickers in the universe yet.")
         return
 
-    # Summary table
+    # Summary table — always full universe medians
     summary_display = summary.rename(columns=_SUMMARY_LABELS)
     float_cols = summary_display.select_dtypes(include="float").columns
     for col in float_cols:
@@ -88,6 +94,8 @@ def main() -> None:
     for sector in sectors:
         with st.expander(sector):
             constituents = _sector_constituents(con, sector, mtime)
+            if display_filter is not None:
+                constituents = constituents[constituents["ticker"].isin(display_filter)]
             if constituents.empty:
                 st.info("No tickers in this sector.")
                 continue
