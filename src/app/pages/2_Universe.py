@@ -3,6 +3,7 @@ Universe management page — add, remove, and refresh tickers.
 """
 
 import io
+import math
 
 import pandas as pd
 import streamlit as st
@@ -14,6 +15,55 @@ from src.app import queries
 load_dotenv()
 
 st.set_page_config(page_title="Universe", layout="wide")
+
+
+@st.dialog("Ticker Drill-Down", width="large")
+def _drill_down_dialog(con, ticker: str) -> None:
+    st.subheader(ticker)
+    tab_prices, tab_fundamentals = st.tabs(["Prices", "Fundamentals"])
+
+    with tab_prices:
+        col_ps, col_from, col_to = st.columns([1, 1, 1])
+        page_size = col_ps.selectbox("Rows per page", [50, 100, 250, 500], index=1, key=f"ps_{ticker}")
+        date_from = col_from.date_input("From", value=None, key=f"df_{ticker}")
+        date_to = col_to.date_input("To", value=None, key=f"dt_{ticker}")
+
+        date_from_str = str(date_from) if date_from else None
+        date_to_str = str(date_to) if date_to else None
+
+        total = queries.prices_count(con, ticker, date_from=date_from_str, date_to=date_to_str)
+        n_pages = max(1, math.ceil(total / page_size))
+
+        if total == 0:
+            st.info("No price data loaded yet for this ticker.")
+        else:
+            page_num = st.number_input(
+                f"Page (1–{n_pages})", min_value=1, max_value=n_pages, value=1, key=f"pg_{ticker}"
+            )
+            offset = (page_num - 1) * page_size
+            df_prices = queries.prices_page(
+                con, ticker, page_size=page_size, offset=offset,
+                date_from=date_from_str, date_to=date_to_str,
+            )
+            st.caption(f"{total:,} rows total — showing {offset + 1}–{min(offset + page_size, total)}")
+            st.dataframe(df_prices, hide_index=True, width="stretch")
+
+    with tab_fundamentals:
+        period = st.radio("Period", ["Quarterly", "Annual"], horizontal=True, key=f"period_{ticker}")
+        period_type = "quarterly" if period == "Quarterly" else "annual"
+        n_periods = 8 if period_type == "quarterly" else 5
+
+        for stmt_type, label in [
+            ("income_statement", "Income Statement"),
+            ("balance_sheet", "Balance Sheet"),
+            ("cash_flow", "Cash Flow"),
+        ]:
+            st.markdown(f"**{label}**")
+            df_stmt = queries.fundamentals_recent(con, ticker, stmt_type, period_type, n=n_periods)
+            if df_stmt.empty:
+                st.caption("No data available.")
+            else:
+                st.dataframe(df_stmt, hide_index=True, width="stretch")
 
 
 @st.cache_resource
@@ -169,9 +219,12 @@ def main() -> None:
         st.caption("Removing is a soft delete — historical data is preserved.")
 
         for ticker in active_tickers:
-            col_name, col_remove, col_refresh = st.columns([3, 1, 1])
+            col_name, col_drill, col_remove, col_refresh = st.columns([3, 1, 1, 1])
             row = df[df["ticker"] == ticker].iloc[0]
             col_name.write(f"**{ticker}** — {row.get('name') or '—'}")
+
+            if col_drill.button("Drill", key=f"drill_{ticker}"):
+                _drill_down_dialog(con, ticker)
 
             if col_remove.button("Remove", key=f"remove_{ticker}"):
                 univ.remove_ticker(con, ticker)

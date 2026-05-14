@@ -679,3 +679,70 @@ def sector_constituents(
     from src.screens.sectors import sector_constituents as _fn
 
     return _fn(con, sector, display_filter=display_filter)
+
+
+# ---------------------------------------------------------------------------
+# Phase 12 — Universe drill-down (paginated prices + fundamentals)
+# ---------------------------------------------------------------------------
+
+
+def prices_page(
+    con: duckdb.DuckDBPyConnection,
+    ticker: str,
+    page_size: int = 100,
+    offset: int = 0,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> pd.DataFrame:
+    clauses = ["ticker = ?"]
+    params: list = [ticker]
+    if date_from:
+        clauses.append("date >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("date <= ?")
+        params.append(date_to)
+    where = " AND ".join(clauses)
+    params += [page_size, offset]
+    return con.execute(
+        f"""
+        SELECT date, open, high, low, close, adjusted_close, volume
+        FROM prices_daily
+        WHERE {where}
+        ORDER BY date DESC
+        LIMIT ? OFFSET ?
+        """,
+        params,
+    ).df()
+
+
+def prices_count(
+    con: duckdb.DuckDBPyConnection,
+    ticker: str,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> int:
+    clauses = ["ticker = ?"]
+    params: list = [ticker]
+    if date_from:
+        clauses.append("date >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("date <= ?")
+        params.append(date_to)
+    where = " AND ".join(clauses)
+    result = con.execute(
+        f"SELECT COUNT(*) FROM prices_daily WHERE {where}",
+        params,
+    ).fetchone()
+    return int(result[0]) if result else 0
+
+
+def fundamentals_recent(
+    con: duckdb.DuckDBPyConnection,
+    ticker: str,
+    statement_type: str,
+    period_type: str = "quarterly",
+    n: int = 8,
+) -> pd.DataFrame:
+    return statement(con, ticker, statement_type, period_type=period_type, depth="summary", n=n)
