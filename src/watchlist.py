@@ -63,6 +63,22 @@ def get_membership(con: duckdb.DuckDBPyConnection, watchlist_id_or_name: int | s
     return [r[0] for r in rows]
 
 
+def replace_membership(con: duckdb.DuckDBPyConnection, watchlist_id: int, tickers: list[str]) -> None:
+    """Replace all members of a watchlist with the given ticker list."""
+    con.execute("BEGIN")
+    try:
+        con.execute("DELETE FROM watchlist_membership WHERE watchlist_id = ?", [watchlist_id])
+        for ticker in tickers:
+            con.execute(
+                "INSERT OR IGNORE INTO watchlist_membership (watchlist_id, ticker) VALUES (?, ?)",
+                [watchlist_id, ticker],
+            )
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+
+
 def _resolve_id(con: duckdb.DuckDBPyConnection, name_or_id: str | int) -> int:
     if isinstance(name_or_id, int):
         return name_or_id

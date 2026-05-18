@@ -5,7 +5,7 @@ import streamlit as st
 from src.app import queries
 from src.app import sidebar as app_sidebar
 from src.ticker_input import parse_ticker_input
-from src.watchlist import create_watchlist, delete_watchlist, get_membership
+from src.watchlist import create_watchlist, delete_watchlist, get_membership, replace_membership
 
 st.set_page_config(page_title="Watchlists", layout="wide")
 
@@ -17,6 +17,33 @@ def _get_con():
 
 def _clear_cache() -> None:
     st.cache_data.clear()
+
+
+@st.dialog("Edit Watchlist", width="large")
+def _edit_dialog(con, wid: int, name: str, current_members: list[str]) -> None:
+    st.subheader(name)
+    st.caption("Edit the ticker list — one ticker per line.")
+    raw_text = st.text_area(
+        "Members",
+        value="\n".join(current_members),
+        height=300,
+        key=f"edit_text_{wid}",
+    )
+    uploaded = st.file_uploader("Or replace with a .txt file", type=["txt"], key=f"edit_file_{wid}")
+    if uploaded is not None:
+        raw_text = uploaded.read().decode()
+    if st.button("Save", key=f"edit_save_{wid}"):
+        tickers = parse_ticker_input(raw_text)
+        if not tickers:
+            st.error("Provide at least one ticker.")
+        else:
+            try:
+                replace_membership(con, wid, tickers)
+                _clear_cache()
+                st.toast(f"Updated '{name}' with {len(tickers)} ticker(s).")
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
 
 
 def main() -> None:
@@ -79,7 +106,10 @@ def main() -> None:
             else:
                 st.info("No members.")
 
-            col_del, _ = st.columns([1, 5])
+            col_edit, col_del, _ = st.columns([1, 1, 4])
+            with col_edit:
+                if st.button("Edit", key=f"edit_wl_{wid}"):
+                    _edit_dialog(con, wid, row["name"], members)
             with col_del:
                 if st.button("Delete", key=f"del_wl_{wid}", type="secondary"):
                     delete_watchlist(con, wid)
