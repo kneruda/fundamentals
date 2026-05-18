@@ -12,6 +12,8 @@ def screen_absolute_valuation(
     max_pb: float | None = None,
     max_ev_ebitda: float | None = None,
     min_fcf_yield: float | None = None,
+    min_mktcap_b: float | None = None,
+    min_adtv_m: float | None = None,
     display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Active tickers passing absolute multiple thresholds."""
@@ -30,10 +32,13 @@ def screen_absolute_valuation(
             m.ps_trailing,
             m.pb_trailing,
             m.ev_ebitda_trailing,
-            m.fcf_yield * 100 AS fcf_yield_pct
+            m.fcf_yield * 100 AS fcf_yield_pct,
+            sz.mktcap_b,
+            sz.adtv_20d_m
         FROM universe u
-        LEFT JOIN security_master sm ON u.ticker = sm.ticker
-        LEFT JOIN latest_mult m      ON u.ticker = m.ticker
+        LEFT JOIN security_master sm     ON u.ticker = sm.ticker
+        LEFT JOIN latest_mult m          ON u.ticker = m.ticker
+        LEFT JOIN universe_size_latest sz ON u.ticker = sz.ticker
         WHERE u.active = true
         ORDER BY sm.sector NULLS LAST, u.ticker
     """).df()
@@ -47,6 +52,10 @@ def screen_absolute_valuation(
         df = df[df["ev_ebitda_trailing"].notna() & (df["ev_ebitda_trailing"] <= max_ev_ebitda)]
     if min_fcf_yield is not None:
         df = df[df["fcf_yield_pct"].notna() & (df["fcf_yield_pct"] >= min_fcf_yield)]
+    if min_mktcap_b is not None:
+        df = df[df["mktcap_b"].notna() & (df["mktcap_b"] >= min_mktcap_b)]
+    if min_adtv_m is not None:
+        df = df[df["adtv_20d_m"].notna() & (df["adtv_20d_m"] >= min_adtv_m)]
     if display_filter is not None:
         df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)
@@ -60,6 +69,8 @@ def screen_relative_history(
     max_ev_rank: float | None = None,
     max_ps_rank: float | None = None,
     min_history_days: int = 0,
+    min_mktcap_b: float | None = None,
+    min_adtv_m: float | None = None,
     display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Tickers whose current multiples are cheap vs. their own history.
@@ -98,10 +109,13 @@ def screen_relative_history(
             l.ev_rank * 100     AS ev_pct_rank,
             l.ps_trailing,
             l.ps_rank * 100     AS ps_pct_rank,
-            l.n_obs             AS history_days
+            l.n_obs             AS history_days,
+            sz.mktcap_b,
+            sz.adtv_20d_m
         FROM universe u
-        LEFT JOIN security_master sm ON u.ticker = sm.ticker
-        LEFT JOIN latest l           ON u.ticker = l.ticker
+        LEFT JOIN security_master sm      ON u.ticker = sm.ticker
+        LEFT JOIN latest l                ON u.ticker = l.ticker
+        LEFT JOIN universe_size_latest sz  ON u.ticker = sz.ticker
         WHERE u.active = true
         ORDER BY l.pe_rank NULLS LAST, u.ticker
         """,
@@ -115,6 +129,10 @@ def screen_relative_history(
         df = df[df["ev_pct_rank"].notna() & (df["ev_pct_rank"] <= max_ev_rank)]
     if max_ps_rank is not None:
         df = df[df["ps_pct_rank"].notna() & (df["ps_pct_rank"] <= max_ps_rank)]
+    if min_mktcap_b is not None:
+        df = df[df["mktcap_b"].notna() & (df["mktcap_b"] >= min_mktcap_b)]
+    if min_adtv_m is not None:
+        df = df[df["adtv_20d_m"].notna() & (df["adtv_20d_m"] >= min_adtv_m)]
     if display_filter is not None:
         df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)
@@ -126,6 +144,8 @@ def screen_growth(
     min_rev_yoy: float | None = None,
     min_eps_yoy: float | None = None,
     require_acceleration: bool = False,
+    min_mktcap_b: float | None = None,
+    min_adtv_m: float | None = None,
     display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Tickers with strong revenue/EPS growth and optional acceleration filter."""
@@ -163,11 +183,14 @@ def screen_growth(
             a.g3 * 100 AS g3_pct,
             a.g4 * 100 AS g4_pct,
             (a.g1 IS NOT NULL AND a.g2 IS NOT NULL AND a.g3 IS NOT NULL AND a.g4 IS NOT NULL
-             AND a.g1 > a.g2 AND a.g2 > a.g3 AND a.g3 > a.g4) AS is_accelerating
+             AND a.g1 > a.g2 AND a.g2 > a.g3 AND a.g3 > a.g4) AS is_accelerating,
+            sz.mktcap_b,
+            sz.adtv_20d_m
         FROM universe u
-        LEFT JOIN security_master sm ON u.ticker = sm.ticker
-        LEFT JOIN latest_fund f      ON u.ticker = f.ticker
-        LEFT JOIN accel a            ON u.ticker = a.ticker
+        LEFT JOIN security_master sm      ON u.ticker = sm.ticker
+        LEFT JOIN latest_fund f           ON u.ticker = f.ticker
+        LEFT JOIN accel a                 ON u.ticker = a.ticker
+        LEFT JOIN universe_size_latest sz  ON u.ticker = sz.ticker
         WHERE u.active = true
         ORDER BY f.quarterly_revenue_growth_yoy DESC NULLS LAST, u.ticker
     """).df()
@@ -177,6 +200,10 @@ def screen_growth(
         df = df[df["eps_yoy_pct"].notna() & (df["eps_yoy_pct"] >= min_eps_yoy)]
     if require_acceleration:
         df = df[df["is_accelerating"] == True]  # noqa: E712
+    if min_mktcap_b is not None:
+        df = df[df["mktcap_b"].notna() & (df["mktcap_b"] >= min_mktcap_b)]
+    if min_adtv_m is not None:
+        df = df[df["adtv_20d_m"].notna() & (df["adtv_20d_m"] >= min_adtv_m)]
     if display_filter is not None:
         df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)
@@ -190,6 +217,8 @@ def screen_quality(
     min_gross_margin: float | None = None,
     min_fcf_conversion: float | None = None,
     require_margin_expansion: bool = False,
+    min_mktcap_b: float | None = None,
+    min_adtv_m: float | None = None,
     display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Tickers with high returns, wide margins, and strong FCF conversion.
@@ -270,15 +299,18 @@ def screen_quality(
             CASE WHEN ni.ttm_net_income > 0
                  THEN fcf.ttm_fcf / ni.ttm_net_income * 100
                  END                                                                  AS fcf_conversion_pct,
-            mc.margin_expanding
+            mc.margin_expanding,
+            sz.mktcap_b,
+            sz.adtv_20d_m
         FROM universe u
-        LEFT JOIN security_master sm ON u.ticker = sm.ticker
-        LEFT JOIN latest_fund f      ON u.ticker = f.ticker
-        LEFT JOIN latest_bs bs       ON u.ticker = bs.ticker
-        LEFT JOIN ttm_op op          ON u.ticker = op.ticker
-        LEFT JOIN latest_fcf fcf     ON u.ticker = fcf.ticker
-        LEFT JOIN ttm_ni ni          ON u.ticker = ni.ticker
-        LEFT JOIN margin_cmp mc      ON u.ticker = mc.ticker
+        LEFT JOIN security_master sm      ON u.ticker = sm.ticker
+        LEFT JOIN latest_fund f           ON u.ticker = f.ticker
+        LEFT JOIN latest_bs bs            ON u.ticker = bs.ticker
+        LEFT JOIN ttm_op op               ON u.ticker = op.ticker
+        LEFT JOIN latest_fcf fcf          ON u.ticker = fcf.ticker
+        LEFT JOIN ttm_ni ni               ON u.ticker = ni.ticker
+        LEFT JOIN margin_cmp mc           ON u.ticker = mc.ticker
+        LEFT JOIN universe_size_latest sz  ON u.ticker = sz.ticker
         WHERE u.active = true
         ORDER BY f.return_on_equity_ttm DESC NULLS LAST, u.ticker
     """).df()
@@ -292,6 +324,10 @@ def screen_quality(
         df = df[df["fcf_conversion_pct"].notna() & (df["fcf_conversion_pct"] >= min_fcf_conversion)]
     if require_margin_expansion:
         df = df[df["margin_expanding"] == True]  # noqa: E712
+    if min_mktcap_b is not None:
+        df = df[df["mktcap_b"].notna() & (df["mktcap_b"] >= min_mktcap_b)]
+    if min_adtv_m is not None:
+        df = df[df["adtv_20d_m"].notna() & (df["adtv_20d_m"] >= min_adtv_m)]
     if display_filter is not None:
         df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)
@@ -303,6 +339,8 @@ def screen_balance_sheet(
     max_net_debt_ebitda: float | None = None,
     min_interest_coverage: float | None = None,
     min_current_ratio: float | None = None,
+    min_mktcap_b: float | None = None,
+    min_adtv_m: float | None = None,
     display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Tickers with strong balance sheets — low leverage, solid coverage, ample liquidity."""
@@ -343,12 +381,15 @@ def screen_balance_sheet(
                  THEN bs.net_debt / ei.ttm_ebitda                                 END AS net_debt_ebitda,
             CASE WHEN ti.ttm_interest > 0
                  THEN ei.ttm_ebitda / ti.ttm_interest                             END AS interest_coverage,
-            bs.total_current_assets / NULLIF(bs.total_current_liabilities, 0)     AS current_ratio
+            bs.total_current_assets / NULLIF(bs.total_current_liabilities, 0)     AS current_ratio,
+            sz.mktcap_b,
+            sz.adtv_20d_m
         FROM universe u
-        LEFT JOIN security_master sm ON u.ticker = sm.ticker
-        LEFT JOIN latest_bs bs       ON u.ticker = bs.ticker
-        LEFT JOIN latest_ebi ei      ON u.ticker = ei.ticker
-        LEFT JOIN ttm_int ti         ON u.ticker = ti.ticker
+        LEFT JOIN security_master sm      ON u.ticker = sm.ticker
+        LEFT JOIN latest_bs bs            ON u.ticker = bs.ticker
+        LEFT JOIN latest_ebi ei           ON u.ticker = ei.ticker
+        LEFT JOIN ttm_int ti              ON u.ticker = ti.ticker
+        LEFT JOIN universe_size_latest sz  ON u.ticker = sz.ticker
         WHERE u.active = true
         ORDER BY net_debt_ebitda NULLS LAST, u.ticker
     """).df()
@@ -360,6 +401,10 @@ def screen_balance_sheet(
         ]
     if min_current_ratio is not None:
         df = df[df["current_ratio"].notna() & (df["current_ratio"] >= min_current_ratio)]
+    if min_mktcap_b is not None:
+        df = df[df["mktcap_b"].notna() & (df["mktcap_b"] >= min_mktcap_b)]
+    if min_adtv_m is not None:
+        df = df[df["adtv_20d_m"].notna() & (df["adtv_20d_m"] >= min_adtv_m)]
     if display_filter is not None:
         df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)
@@ -371,6 +416,8 @@ def screen_income(
     min_yield: float | None = None,
     max_payout: float | None = None,
     min_div_years: int | None = None,
+    min_mktcap_b: float | None = None,
+    min_adtv_m: float | None = None,
     display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Dividend payers with sufficient yield, sustainable payout, and history."""
@@ -392,11 +439,14 @@ def screen_income(
             sm.sector,
             d.forward_annual_dividend_yield * 100  AS div_yield_pct,
             d.payout_ratio * 100                   AS payout_ratio_pct,
-            dy.n_div_years
+            dy.n_div_years,
+            sz.mktcap_b,
+            sz.adtv_20d_m
         FROM universe u
-        LEFT JOIN security_master sm ON u.ticker = sm.ticker
-        LEFT JOIN latest_div d       ON u.ticker = d.ticker
-        LEFT JOIN div_years dy       ON u.ticker = dy.ticker
+        LEFT JOIN security_master sm      ON u.ticker = sm.ticker
+        LEFT JOIN latest_div d            ON u.ticker = d.ticker
+        LEFT JOIN div_years dy            ON u.ticker = dy.ticker
+        LEFT JOIN universe_size_latest sz  ON u.ticker = sz.ticker
         WHERE u.active = true
         ORDER BY d.forward_annual_dividend_yield DESC NULLS LAST, u.ticker
     """).df()
@@ -406,6 +456,10 @@ def screen_income(
         df = df[df["payout_ratio_pct"].notna() & (df["payout_ratio_pct"] <= max_payout)]
     if min_div_years is not None:
         df = df[df["n_div_years"].notna() & (df["n_div_years"] >= min_div_years)]
+    if min_mktcap_b is not None:
+        df = df[df["mktcap_b"].notna() & (df["mktcap_b"] >= min_mktcap_b)]
+    if min_adtv_m is not None:
+        df = df[df["adtv_20d_m"].notna() & (df["adtv_20d_m"] >= min_adtv_m)]
     if display_filter is not None:
         df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)

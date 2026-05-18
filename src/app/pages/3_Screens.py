@@ -209,6 +209,8 @@ _COLUMN_LABELS = {
     "div_yield_pct": "Yield %",
     "payout_ratio_pct": "Payout %",
     "n_div_years": "Div Years",
+    "mktcap_b": "Mkt Cap ($B)",
+    "adtv_20d_m": "Avg Daily Vol ($M)",
 }
 
 
@@ -231,8 +233,18 @@ def main() -> None:
     screen_key = _SCREENS[screen_name]
 
     st.sidebar.markdown("---")
+    st.sidebar.markdown("**Universe Size**")
+    size_kwargs: dict = {}
+    v = _optional_float("Min Mkt Cap ($B)", "min_mktcap", min_val=0.1, max_val=5000.0, step=1.0)
+    if v is not None:
+        size_kwargs["min_mktcap_b"] = v
+    v = _optional_float("Min Avg Daily Vol ($M)", "min_adtv", min_val=0.1, max_val=500.0, step=1.0)
+    if v is not None:
+        size_kwargs["min_adtv_m"] = v
+
+    st.sidebar.markdown("---")
     st.sidebar.subheader("Filters")
-    kwargs = _FILTER_RENDERERS[screen_key]()
+    kwargs = {**size_kwargs, **_FILTER_RENDERERS[screen_key]()}
 
     st.subheader(screen_name)
     st.caption(_DESCRIPTIONS[screen_key])
