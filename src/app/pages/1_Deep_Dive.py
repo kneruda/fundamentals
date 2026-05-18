@@ -2,11 +2,17 @@
 Deep Dive page — single-ticker fundamentals, valuation history, and analyst view.
 """
 
+import time
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from dotenv import load_dotenv
 
 from src.app import queries
+from src.ingest.fetch import fetch_news
+
+load_dotenv()
 
 st.set_page_config(page_title="Deep Dive", layout="wide")
 
@@ -59,6 +65,11 @@ def _dividends_annual(_con, ticker: str, mtime: float) -> pd.DataFrame:
 @st.cache_data
 def _statement(_con, ticker: str, stmt_type: str, period_type: str, depth: str, mtime: float) -> pd.DataFrame:
     return queries.statement(_con, ticker, stmt_type, period_type=period_type, depth=depth)
+
+
+@st.cache_data
+def _news(ticker: str, hour_bucket: int) -> list:
+    return fetch_news(ticker, limit=50)
 
 
 def _fmt(val, fmt: str = "{:.2f}", fallback: str = "—") -> str:
@@ -143,7 +154,7 @@ def main() -> None:
     st.divider()
 
     # --- Tabs ---
-    tab_val, tab_prof, tab_analyst, tab_earn, tab_div, tab_stmts = st.tabs(
+    tab_val, tab_prof, tab_analyst, tab_earn, tab_div, tab_stmts, tab_news = st.tabs(
         [
             "Valuation",
             "Profitability",
@@ -151,6 +162,7 @@ def main() -> None:
             "Earnings",
             "Dividends",
             "Statements",
+            "News",
         ]
     )
 
@@ -525,6 +537,35 @@ def main() -> None:
                 st.dataframe(display, width="stretch")
             else:
                 st.info(f"No {period_label.lower()} cash flow data.")
+
+    # -------------------------------------------------------------------------
+    # News tab
+    # -------------------------------------------------------------------------
+    with tab_news:
+        hour_bucket = int(time.time() // 3600)
+        try:
+            articles = _news(ticker, hour_bucket)
+        except Exception as exc:
+            st.error(f"Could not load news: {exc}")
+            articles = []
+
+        if articles:
+            for article in articles:
+                title = article.get("title") or "Untitled"
+                link = article.get("link", "")
+                raw_date = article.get("date", "")
+                date = raw_date[:10] if raw_date else ""
+                content = article.get("content", "")
+                snippet = (content[:400] + "...") if len(content) > 400 else content
+
+                label = f"**{date}** — {title}" if date else title
+                with st.expander(label):
+                    if link:
+                        st.markdown(f"[Read full article]({link})")
+                    if snippet:
+                        st.write(snippet)
+        else:
+            st.info("No recent news available.")
 
 
 main()

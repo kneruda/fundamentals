@@ -86,3 +86,19 @@ def fetch_prices(ticker: str) -> list:
     if not isinstance(data, list):
         raise ValueError(f"Unexpected price data format for {ticker!r}")
     return data
+
+
+def fetch_news(ticker: str, limit: int = 50) -> list:
+    cfg = _settings()
+    vendor = cfg.get("vendor", {})
+    base_url = vendor.get("base_url", "https://eodhd.com/api")
+    exchange = vendor.get("default_exchange", "US")
+    if "." not in ticker:
+        ticker = f"{ticker}.{exchange}"
+    url = f"{base_url}/news"
+    data = _get(url, {"api_token": _token(), "s": ticker, "limit": limit, "fmt": "json"}, vendor)
+    if isinstance(data, dict) and "Error" in data:
+        raise ValueError(f"EODHD news error for {ticker!r}: {data['Error']}")
+    if not isinstance(data, list):
+        raise ValueError(f"Unexpected news response for {ticker!r}")
+    return data
