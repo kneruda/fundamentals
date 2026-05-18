@@ -65,9 +65,9 @@ def _fmt_df(df: pd.DataFrame) -> pd.DataFrame:
         "last_snap": "Last Snapshot",
     }
     display = df.rename(columns={c: labels.get(c, c) for c in df.columns})
-    for col in display.select_dtypes(include="float").columns:
-        display[col] = display[col].map(lambda x: f"{x:.2f}" if x == x else "")
-    return display
+    float_cols = display.select_dtypes(include="float").columns
+    fmt = {col: "{:.2f}" for col in float_cols}
+    return display.style.format(fmt, na_rep="—")
 
 
 def main() -> None:

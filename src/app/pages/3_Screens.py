@@ -217,9 +217,8 @@ _COLUMN_LABELS = {
 def _fmt_df(df):
     display = df.rename(columns={c: _COLUMN_LABELS.get(c, c) for c in df.columns})
     float_cols = display.select_dtypes(include="float").columns
-    for col in float_cols:
-        display[col] = display[col].map(lambda x: f"{x:.1f}" if x == x else "")
-    return display
+    fmt = {col: "{:.1f}" for col in float_cols}
+    return display.style.format(fmt, na_rep="—")
 
 
 def main() -> None:
