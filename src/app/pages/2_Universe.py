@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from src import universe as univ
 from src.app import queries
+from src.ingest.orchestrator import refresh_universe_threaded
 
 load_dotenv()
 
@@ -213,6 +214,30 @@ def main() -> None:
     # ---- Per-ticker actions ----
     active_tickers = df[df["active"]]["ticker"].tolist() if not df.empty else []
     inactive_tickers = df[~df["active"]]["ticker"].tolist() if not df.empty else []
+
+    # ---- Refresh all ----
+    if active_tickers:
+        st.subheader("Refresh All Active Tickers")
+        st.caption(
+            "Re-fetches latest data from EODHD for every active ticker. "
+            "HTTP fetches run in parallel (3 workers); database writes are serialized."
+        )
+        if st.button("Refresh All", key="refresh_all"):
+            with st.spinner(f"Refreshing {len(active_tickers)} tickers — this may take several minutes..."):
+                results = refresh_universe_threaded(con)
+            _clear_cache()
+            n_ok = sum(1 for _, ok, _ in results if ok)
+            n_fail = len(results) - n_ok
+            if n_fail == 0:
+                st.success(f"All {n_ok} tickers refreshed successfully.")
+                st.rerun()
+            else:
+                st.warning(f"{n_ok} succeeded, {n_fail} failed.")
+                failed_df = pd.DataFrame(
+                    [(t, e) for t, ok, e in results if not ok],
+                    columns=["Ticker", "Error"],
+                )
+                st.dataframe(failed_df, hide_index=True, width="stretch")
 
     if active_tickers:
         st.subheader("Remove or Refresh Active Tickers")
