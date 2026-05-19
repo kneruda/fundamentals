@@ -17,6 +17,8 @@ load_dotenv()
 
 st.set_page_config(page_title="Universe", layout="wide")
 
+_TABLE_HEIGHT = 420
+
 
 @st.dialog("Ticker Drill-Down", width="large")
 def _drill_down_dialog(con, ticker: str) -> None:
@@ -86,6 +88,61 @@ def _clear_cache() -> None:
     st.cache_data.clear()
 
 
+def _run_refresh_all(con, active_tickers: list[str]) -> None:
+    n = len(active_tickers)
+    status_slot = st.empty()
+    bar = st.progress(0.0)
+    ticker_slot = st.empty()
+
+    state = {"fetched": 0, "fetch_failed": 0, "done": 0, "current": ""}
+
+    def _update_display() -> None:
+        fetched = state["fetched"]
+        done = state["done"]
+        current = state["current"]
+        status_slot.markdown(
+            f"**Fetched** {fetched} / {n} &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"**Ingested** {done} / {n}"
+        )
+        bar.progress(min(done / n, 1.0) if n else 1.0)
+        if current:
+            ticker_slot.caption(f"Ingesting: {current}")
+
+    def on_progress(ticker: str, phase: str) -> None:
+        if phase == "fetch_done":
+            state["fetched"] += 1
+        elif phase == "fetch_failed":
+            state["fetched"] += 1
+            state["fetch_failed"] += 1
+        elif phase == "ingest_start":
+            state["current"] = ticker
+        elif phase in ("ingest_done", "ingest_failed"):
+            state["done"] += 1
+            state["current"] = ""
+        _update_display()
+
+    _update_display()
+    results = refresh_universe_threaded(con, on_progress=on_progress)
+
+    status_slot.empty()
+    bar.empty()
+    ticker_slot.empty()
+    _clear_cache()
+
+    n_ok = sum(1 for _, ok, _ in results if ok)
+    n_fail = len(results) - n_ok
+    if n_fail == 0:
+        st.success(f"All {n_ok} tickers refreshed successfully.")
+        st.rerun()
+    else:
+        st.warning(f"{n_ok} succeeded, {n_fail} failed.")
+        failed_df = pd.DataFrame(
+            [(t, e) for t, ok, e in results if not ok],
+            columns=["Ticker", "Error"],
+        )
+        st.dataframe(failed_df, hide_index=True, width="stretch")
+
+
 def main() -> None:
     con = _get_con()
     mtime = queries.warehouse_mtime()
@@ -111,7 +168,7 @@ def main() -> None:
             "Last Load", "Status", "Price Start", "Price End",
             "Active", "Notes",
         ]
-        st.dataframe(display, hide_index=True, width="stretch")
+        st.dataframe(display, hide_index=True, width="stretch", height=_TABLE_HEIGHT)
 
     # ---- Snapshot coverage ----
     st.subheader("Analyst Snapshot Coverage")
@@ -132,7 +189,7 @@ def main() -> None:
                 "days_since_last": "Days Since Last",
             }
         )
-        st.dataframe(cov_display, hide_index=True, width="stretch")
+        st.dataframe(cov_display, hide_index=True, width="stretch", height=_TABLE_HEIGHT)
 
     # ---- Add ticker form ----
     st.subheader("Add Ticker")
@@ -223,21 +280,7 @@ def main() -> None:
             "HTTP fetches run in parallel (3 workers); database writes are serialized."
         )
         if st.button("Refresh All", key="refresh_all"):
-            with st.spinner(f"Refreshing {len(active_tickers)} tickers — this may take several minutes..."):
-                results = refresh_universe_threaded(con)
-            _clear_cache()
-            n_ok = sum(1 for _, ok, _ in results if ok)
-            n_fail = len(results) - n_ok
-            if n_fail == 0:
-                st.success(f"All {n_ok} tickers refreshed successfully.")
-                st.rerun()
-            else:
-                st.warning(f"{n_ok} succeeded, {n_fail} failed.")
-                failed_df = pd.DataFrame(
-                    [(t, e) for t, ok, e in results if not ok],
-                    columns=["Ticker", "Error"],
-                )
-                st.dataframe(failed_df, hide_index=True, width="stretch")
+            _run_refresh_all(con, active_tickers)
 
     if active_tickers:
         st.subheader("Remove or Refresh Active Tickers")

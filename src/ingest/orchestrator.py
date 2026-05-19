@@ -2,6 +2,7 @@ import json
 import logging
 import shutil
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
@@ -185,11 +186,15 @@ def _fetch_ticker_files(ticker: str, cfg: dict) -> tuple[Path, Path]:
 def refresh_universe_threaded(
     con: duckdb.DuckDBPyConnection,
     max_workers: int = 3,
+    on_progress: Callable[[str, str], None] | None = None,
 ) -> list[tuple[str, bool, str | None]]:
     """Refresh all active tickers: parallel HTTP fetches, then serial DB writes.
 
     Threads are used only for the network fetch phase. All DuckDB writes are
     serialized in the caller's thread, preserving the single-writer guarantee.
+
+    on_progress(ticker, phase) is called from the main thread at:
+      "fetch_done", "fetch_failed", "ingest_start", "ingest_done", "ingest_failed"
     """
     tickers = [r[0] for r in con.execute("SELECT ticker FROM universe WHERE active").fetchall()]
     log.info("refreshing %d active tickers (max_workers=%d)", len(tickers), max_workers)
@@ -204,26 +209,38 @@ def refresh_universe_threaded(
             ticker = futures[future]
             try:
                 fetched[ticker] = future.result()
+                if on_progress:
+                    on_progress(ticker, "fetch_done")
             except Exception as exc:
                 log.exception("fetch failed ticker=%s", ticker)
                 fetch_errors[ticker] = str(exc)
+                if on_progress:
+                    on_progress(ticker, "fetch_failed")
 
     results: list[tuple[str, bool, str | None]] = []
     for ticker in tickers:
         if ticker in fetch_errors:
             _record_load_run(con, ticker, "failed", 0, fetch_errors[ticker])
             results.append((ticker, False, fetch_errors[ticker]))
+            if on_progress:
+                on_progress(ticker, "ingest_failed")
             continue
         t0 = time.monotonic()
         fund_path, price_path = fetched[ticker]
+        if on_progress:
+            on_progress(ticker, "ingest_start")
         try:
             ingest_ticker(con, fund_path, price_path, ticker=ticker)
             _record_load_run(con, ticker, "ok", int((time.monotonic() - t0) * 1000))
             results.append((ticker, True, None))
+            if on_progress:
+                on_progress(ticker, "ingest_done")
         except Exception as exc:
             log.exception("ingest failed ticker=%s", ticker)
             _record_load_run(con, ticker, "failed", int((time.monotonic() - t0) * 1000), str(exc))
             results.append((ticker, False, str(exc)))
+            if on_progress:
+                on_progress(ticker, "ingest_failed")
 
     return results
 
