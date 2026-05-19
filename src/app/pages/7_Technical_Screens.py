@@ -4,6 +4,7 @@ import streamlit as st
 
 from src.app import queries
 from src.app import sidebar as app_sidebar
+from src.compute.technicals import recompute_technicals
 from src.watchlist import create_watchlist
 
 st.set_page_config(page_title="Technical Screens", layout="wide")
@@ -172,6 +173,15 @@ def main() -> None:
     display_filter = app_sidebar.watchlist_selector(con)
 
     st.title("Technical Screens")
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Data**")
+    st.sidebar.caption("Recompute indicators from stored prices — no EODHD fetch.")
+    if st.sidebar.button("Update Technicals", key="tech_recompute_btn"):
+        with st.spinner("Recomputing technical indicators..."):
+            recompute_technicals(con)
+        st.success("Technicals updated.")
+        st.rerun()
 
     screen_name = st.sidebar.selectbox("Screen", list(_SCREENS.keys()), key="tech_screen_sel")
     screen_key = _SCREENS[screen_name]

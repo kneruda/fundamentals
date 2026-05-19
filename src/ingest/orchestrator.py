@@ -242,6 +242,12 @@ def refresh_universe_threaded(
             if on_progress:
                 on_progress(ticker, "ingest_failed")
 
+    if tickers:
+        from src.compute.technicals import recompute_technicals
+
+        log.info("recomputing technicals for all active tickers")
+        recompute_technicals(con)
+
     return results
 
 

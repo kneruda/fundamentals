@@ -931,10 +931,8 @@ def deep_dive_technicals(
     lookback_days=None means full history.
     """
     date_clause = ""
-    params: list = [ticker]
     if lookback_days is not None:
-        date_clause = "AND t.date >= CURRENT_DATE - INTERVAL ? DAY"
-        params.append(lookback_days)
+        date_clause = f"AND t.date >= CURRENT_DATE - {int(lookback_days)}"
 
     return con.execute(
         f"""
@@ -956,5 +954,5 @@ def deep_dive_technicals(
           {date_clause}
         ORDER BY t.date
         """,
-        params,
+        [ticker],
     ).df()
