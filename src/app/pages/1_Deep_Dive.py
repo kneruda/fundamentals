@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from dotenv import load_dotenv
+from plotly.subplots import make_subplots
 
 from src.app import queries
 from src.ingest.fetch import fetch_news
@@ -70,6 +71,11 @@ def _statement(_con, ticker: str, stmt_type: str, period_type: str, depth: str, 
 @st.cache_data
 def _news(ticker: str, hour_bucket: int) -> list:
     return fetch_news(ticker, limit=50)
+
+
+@st.cache_data
+def _technicals(_con, ticker: str, lookback_days: int | None, mtime: float) -> pd.DataFrame:
+    return queries.deep_dive_technicals(_con, ticker, lookback_days)
 
 
 def _fmt(val, fmt: str = "{:.2f}", fallback: str = "—") -> str:
@@ -154,7 +160,7 @@ def main() -> None:
     st.divider()
 
     # --- Tabs ---
-    tab_val, tab_prof, tab_analyst, tab_earn, tab_div, tab_stmts, tab_news = st.tabs(
+    tab_val, tab_prof, tab_analyst, tab_earn, tab_div, tab_stmts, tab_news, tab_tech = st.tabs(
         [
             "Valuation",
             "Profitability",
@@ -163,6 +169,7 @@ def main() -> None:
             "Dividends",
             "Statements",
             "News",
+            "Technicals",
         ]
     )
 
@@ -537,6 +544,206 @@ def main() -> None:
                 st.dataframe(display, width="stretch")
             else:
                 st.info(f"No {period_label.lower()} cash flow data.")
+
+    # -------------------------------------------------------------------------
+    # Technicals tab
+    # -------------------------------------------------------------------------
+    with tab_tech:
+        _LOOKBACK_OPTIONS = {"6M": 182, "1Y": 365, "3Y": 1095, "5Y": 1825, "Max": None}
+        range_key = st.radio(
+            "Range", list(_LOOKBACK_OPTIONS.keys()), horizontal=True, index=1, key="tech_range"
+        )
+        lookback = _LOOKBACK_OPTIONS[range_key]
+
+        tech = _technicals(con, ticker, lookback, mtime)
+
+        if tech.empty:
+            st.info("No technicals data available. Run rebuild.py to compute indicators.")
+        else:
+            latest = tech.iloc[-1]
+
+            # --- Current signals summary ---
+            rsi = latest.get("rsi_14")
+            macd_hist = latest.get("macd_histogram")
+            pct_sma200 = latest.get("pct_from_sma_200")
+            pct_52h = latest.get("pct_from_52w_high")
+            vol_ratio = latest.get("volume_ratio")
+            ac = latest.get("adjusted_close")
+            bb_mid = latest.get("bb_middle")
+            bb_up = latest.get("bb_upper")
+            bb_low_val = latest.get("bb_lower")
+
+            def _bb_position(price, low_b, mid_b, high_b):
+                if any(v is None or (isinstance(v, float) and pd.isna(v)) for v in [price, low_b, mid_b, high_b]):
+                    return "—", "off"
+                if price < mid_b:
+                    return "Lower band", "inverse"
+                if price > mid_b:
+                    return "Upper band", "normal"
+                return "Middle band", "off"
+
+            bb_pos_label, bb_delta_color = _bb_position(ac, bb_low_val, bb_mid, bb_up)
+
+            sig_c1, sig_c2, sig_c3, sig_c4, sig_c5, sig_c6 = st.columns(6)
+            sig_c1.metric(
+                "RSI(14)",
+                _fmt(rsi, "{:.1f}"),
+                "Oversold" if rsi is not None and not pd.isna(rsi) and rsi < 30
+                else ("Overbought" if rsi is not None and not pd.isna(rsi) and rsi > 70 else "Neutral"),
+                delta_color="inverse" if rsi is not None and not pd.isna(rsi) and rsi > 70 else "normal",
+            )
+            sig_c2.metric(
+                "MACD Histogram",
+                _fmt(macd_hist, "{:+.3f}"),
+                "Bullish" if macd_hist is not None and not pd.isna(macd_hist) and macd_hist > 0 else "Bearish",
+                delta_color="normal" if macd_hist is not None and not pd.isna(macd_hist) and macd_hist > 0 else "inverse",
+            )
+            sig_c3.metric("BB Position", bb_pos_label, delta_color=bb_delta_color)
+            sig_c4.metric("% from SMA200", _fmt(pct_sma200, "{:+.1%}"))
+            sig_c5.metric("% from 52W High", _fmt(pct_52h, "{:+.1%}"))
+            sig_c6.metric(
+                "Vol Ratio",
+                _fmt(vol_ratio, "{:.2f}×"),
+                "Spike" if vol_ratio is not None and not pd.isna(vol_ratio) and vol_ratio > 2.0 else None,
+                delta_color="normal",
+            )
+
+            st.divider()
+
+            # --- Chart controls ---
+            ctrl1, ctrl2 = st.columns(2)
+            show_candles = ctrl1.checkbox("Candlestick", value=False, key="tech_candles")
+            show_bb = ctrl2.checkbox("Bollinger Bands", value=False, key="tech_bb")
+
+            # --- Plotly subplot chart ---
+            fig = make_subplots(
+                rows=4,
+                cols=1,
+                shared_xaxes=True,
+                row_heights=[0.50, 0.15, 0.17, 0.18],
+                vertical_spacing=0.02,
+                subplot_titles=("Price", "Volume", "RSI(14)", "MACD"),
+            )
+
+            dates = tech["date"].astype(str)
+
+            # Row 1: Price
+            if show_candles and all(c in tech.columns for c in ["open", "high", "low", "close"]):
+                fig.add_trace(
+                    go.Candlestick(
+                        x=dates,
+                        open=tech["open"],
+                        high=tech["high"],
+                        low=tech["low"],
+                        close=tech["close"],
+                        name="Price",
+                        showlegend=False,
+                    ),
+                    row=1, col=1,
+                )
+            else:
+                fig.add_trace(
+                    go.Scatter(x=dates, y=tech["adjusted_close"], name="Price", mode="lines",
+                               line=dict(color="#4a90e2", width=1.5)),
+                    row=1, col=1,
+                )
+
+            for col, label, color in [
+                ("sma_20", "SMA20", "#f39c12"),
+                ("sma_50", "SMA50", "#e74c3c"),
+                ("sma_200", "SMA200", "#9b59b6"),
+            ]:
+                valid = tech.dropna(subset=[col])
+                if not valid.empty:
+                    fig.add_trace(
+                        go.Scatter(x=valid["date"].astype(str), y=valid[col], name=label,
+                                   mode="lines", line=dict(color=color, width=1, dash="dot")),
+                        row=1, col=1,
+                    )
+
+            if show_bb:
+                for col, label, color in [
+                    ("bb_upper", "BB Upper", "#95a5a6"),
+                    ("bb_middle", "BB Middle", "#bdc3c7"),
+                    ("bb_lower", "BB Lower", "#95a5a6"),
+                ]:
+                    valid = tech.dropna(subset=[col])
+                    if not valid.empty:
+                        fig.add_trace(
+                            go.Scatter(x=valid["date"].astype(str), y=valid[col], name=label,
+                                       mode="lines", line=dict(color=color, width=1, dash="dash"),
+                                       showlegend=False),
+                            row=1, col=1,
+                        )
+
+            # Row 2: Volume
+            vol_colors = [
+                "#2ecc71" if (c2 >= o2) else "#e74c3c"
+                for c2, o2 in zip(
+                    tech["close"].fillna(tech["adjusted_close"]),
+                    tech["open"].fillna(tech["adjusted_close"]),
+                )
+            ]
+            fig.add_trace(
+                go.Bar(x=dates, y=tech["volume"], name="Volume",
+                       marker_color=vol_colors, showlegend=False),
+                row=2, col=1,
+            )
+            vol_sma_valid = tech.dropna(subset=["volume_sma_50"])
+            if not vol_sma_valid.empty:
+                fig.add_trace(
+                    go.Scatter(x=vol_sma_valid["date"].astype(str), y=vol_sma_valid["volume_sma_50"],
+                               name="Vol SMA50", mode="lines",
+                               line=dict(color="#f39c12", width=1)),
+                    row=2, col=1,
+                )
+
+            # Row 3: RSI
+            rsi_valid = tech.dropna(subset=["rsi_14"])
+            if not rsi_valid.empty:
+                fig.add_trace(
+                    go.Scatter(x=rsi_valid["date"].astype(str), y=rsi_valid["rsi_14"],
+                               name="RSI(14)", mode="lines", line=dict(color="#3498db", width=1.5)),
+                    row=3, col=1,
+                )
+            fig.add_hline(y=70, line=dict(color="#e74c3c", width=1, dash="dash"), row=3, col=1)
+            fig.add_hline(y=30, line=dict(color="#2ecc71", width=1, dash="dash"), row=3, col=1)
+            fig.add_hrect(y0=70, y1=100, fillcolor="#e74c3c", opacity=0.05, row=3, col=1)
+            fig.add_hrect(y0=0, y1=30, fillcolor="#2ecc71", opacity=0.05, row=3, col=1)
+
+            # Row 4: MACD
+            macd_valid = tech.dropna(subset=["macd", "macd_signal"])
+            if not macd_valid.empty:
+                fig.add_trace(
+                    go.Scatter(x=macd_valid["date"].astype(str), y=macd_valid["macd"],
+                               name="MACD", mode="lines", line=dict(color="#3498db", width=1.5)),
+                    row=4, col=1,
+                )
+                fig.add_trace(
+                    go.Scatter(x=macd_valid["date"].astype(str), y=macd_valid["macd_signal"],
+                               name="Signal", mode="lines", line=dict(color="#e74c3c", width=1)),
+                    row=4, col=1,
+                )
+            hist_valid = tech.dropna(subset=["macd_histogram"])
+            if not hist_valid.empty:
+                hist_colors = [
+                    "#2ecc71" if v >= 0 else "#e74c3c"
+                    for v in hist_valid["macd_histogram"]
+                ]
+                fig.add_trace(
+                    go.Bar(x=hist_valid["date"].astype(str), y=hist_valid["macd_histogram"],
+                           name="Histogram", marker_color=hist_colors, showlegend=False),
+                    row=4, col=1,
+                )
+
+            fig.update_layout(
+                height=700,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                xaxis_rangeslider_visible=False,
+                margin=dict(t=40, b=20),
+            )
+            fig.update_yaxes(fixedrange=False)
+            st.plotly_chart(fig, width="stretch")
 
     # -------------------------------------------------------------------------
     # News tab

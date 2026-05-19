@@ -103,6 +103,9 @@ def fetch_and_ingest(con: duckdb.DuckDBPyConnection, ticker: str) -> None:
             shutil.copy2(price_path, arch / f"{ticker}-prices.json")
 
         ingest_ticker(con, fund_path, price_path, ticker=ticker)
+        from src.compute.technicals import recompute_technicals
+
+        recompute_technicals(con, [ticker])
         _record_load_run(con, ticker, "ok", int((time.monotonic() - t0) * 1000))
     except Exception as exc:
         _record_load_run(con, ticker, "failed", int((time.monotonic() - t0) * 1000), str(exc))

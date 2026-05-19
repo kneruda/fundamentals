@@ -813,3 +813,148 @@ def screen_target_price_raised(
     from src.screens.forward_history import screen_target_price_raised as _fn
 
     return _fn(con, display_filter=display_filter, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Technical screens
+# ---------------------------------------------------------------------------
+
+
+def screen_confirmed_uptrend(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_confirmed_uptrend as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_confirmed_downtrend(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_confirmed_downtrend as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_golden_cross_recent(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_golden_cross_recent as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_death_cross_recent(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_death_cross_recent as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_rsi_oversold(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_rsi_oversold as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_rsi_overbought(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_rsi_overbought as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_macd_bullish_crossover(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_macd_bullish_crossover as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_macd_bearish_crossover(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_macd_bearish_crossover as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_near_52w_high(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_near_52w_high as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_near_52w_low(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_near_52w_low as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_bb_squeeze(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_bb_squeeze as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+def screen_volume_spike(
+    con: duckdb.DuckDBPyConnection, *, display_filter=None, **kwargs
+) -> pd.DataFrame:
+    from src.screens.technicals import screen_volume_spike as _fn
+
+    return _fn(con, display_filter=display_filter, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Deep Dive — technicals chart data
+# ---------------------------------------------------------------------------
+
+
+def deep_dive_technicals(
+    con: duckdb.DuckDBPyConnection,
+    ticker: str,
+    lookback_days: int | None = 365,
+) -> pd.DataFrame:
+    """Return price + technicals history for the Technicals chart panel.
+
+    lookback_days=None means full history.
+    """
+    date_clause = ""
+    params: list = [ticker]
+    if lookback_days is not None:
+        date_clause = "AND t.date >= CURRENT_DATE - INTERVAL ? DAY"
+        params.append(lookback_days)
+
+    return con.execute(
+        f"""
+        SELECT
+            t.date,
+            p.open, p.high, p.low, p.close, p.adjusted_close, p.volume,
+            t.sma_20, t.sma_50, t.sma_200,
+            t.ema_12, t.ema_26,
+            t.bb_upper, t.bb_middle, t.bb_lower,
+            t.rsi_14,
+            t.macd, t.macd_signal, t.macd_histogram,
+            t.volume_sma_50,
+            t.pct_from_sma_200,
+            t.pct_from_52w_high,
+            t.volume_ratio
+        FROM technicals_daily t
+        LEFT JOIN prices_daily p ON t.ticker = p.ticker AND t.date = p.date
+        WHERE t.ticker = ?
+          {date_clause}
+        ORDER BY t.date
+        """,
+        params,
+    ).df()

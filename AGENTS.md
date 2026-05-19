@@ -237,8 +237,8 @@ all funnel through the same code path.
 │   ├── schema/
 │   │   ├── runner.py     # open_db + migration runner + warehouse_path
 │   │   └── migrations/   # 001_initial.sql, 002_monitoring.sql, …
-│   ├── compute/          # ttm, multiples, technicals (views)
-│   ├── screens/          # trailing, sectors, forward_vendor, forward_history
+│   ├── compute/          # ttm, multiples views; recompute_technicals() for the technicals table
+│   ├── screens/          # trailing, sectors, forward_vendor, forward_history, technicals
 │   └── app/              # Home.py + pages/ + queries.py + sidebar.py
 ├── tests/
 │   ├── fixtures/         # AAPL-Fundamentals.json + AAPL.json
@@ -271,18 +271,26 @@ all funnel through the same code path.
 | `watchlist` / `watchlist_membership` | user | user | snapshot ticker lists |
 | `load_runs` | per (ticker, run_started_at) | event | PK `(ticker, run_started_at)`, plus `status`, `duration_ms`, `error_message` |
 | `bulk_load_jobs` | one row / job × ticker | event | `(job_id, ticker)` PK, `created_at`/`updated_at` |
+| `technicals_daily` | ticker × trading date | daily | table, recomputed from `prices_daily` via `recompute_technicals()` |
 
 Derived (views, never persisted as authoritative):
 - `ttm_eps`, `ttm_revenue`, `ttm_ebitda`, `ttm_fcf` — 4-quarter rolling
   sums, all timed off `earnings_events.report_date`
 - `trailing_multiples_daily` — `ASOF LEFT JOIN` of price × shares × TTM ×
   balance sheet
-- `technicals_daily` — MAs, 52W range, realized vol, beta vs.
-  `benchmark.ticker` (default `SPY.US`)
+
+`technicals_daily` is the documented exception to the "derive, don't store"
+principle. It is a persistent table (migration `007`), not a view, because
+several indicators (Wilder's RSI, MACD, ATR, EMAs) require recursive/EWM
+computation that is awkward in pure SQL. The table is fully regenerable from
+`prices_daily` via a single deterministic function (`recompute_technicals`)
+and is never written by anything else, so it cannot silently disagree with
+its inputs in the way stored derived columns typically can.
 
 Views are created by `src/compute/setup_views(con)`, called from
 `schema/runner.open_db` after migrations. Not migration files; they're
-code.
+code. `technicals_daily` is created by migration `007_technicals_daily_table.sql`
+and populated by `src/compute/technicals.recompute_technicals()`.
 
 ## Conventions
 
@@ -371,6 +379,22 @@ code.
   `fetch._get`.
 - **Don't let bulk loads fail silently.** Every per-ticker outcome writes
   a `load_runs` row; checkpoints are in `bulk_load_jobs`.
+- **Don't use `ewm(adjust=True)` for EMAs or Wilder's smoothing** in
+  `recompute_technicals`. `adjust=False` (recursive first-value seed) matches
+  TradingView, Bloomberg, and most charting platforms. `adjust=True` produces
+  different values during the warm-up window.
+- **Don't use `avg_loss.replace(0, NaN)` in RSI computation.** When all
+  moves are gains (avg_loss = 0), the correct RSI is 100. Replacing 0 with
+  NaN silently produces NaN instead of 100. Let pandas handle `gain / 0 = inf`
+  naturally; `100 - 100 / (1 + inf) = 100`.
+- **Don't query `technicals_daily` expecting it to auto-update.** Unlike
+  views, the table does not reflect new `prices_daily` rows until
+  `recompute_technicals()` is called. `fetch_and_ingest` calls it per-ticker;
+  `rebuild.py` calls it for the full universe after the ingest loop.
+- **Don't use f-string interpolation for cross-detection SQL window sizes**
+  when values come from user input. The `lookback_days` used in the technicals
+  screens is a typed Python int, not a string — f-string interpolation is safe
+  there. Parameterize only string-typed user data.
 
 ## Shell execution rules
 

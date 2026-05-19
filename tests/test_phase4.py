@@ -22,9 +22,11 @@ def db():
 
 @pytest.fixture()
 def loaded_db(db):
+    from src.compute.technicals import recompute_technicals
     from src.ingest.orchestrator import ingest_ticker
 
     ingest_ticker(db, FUNDAMENTALS, PRICES)
+    recompute_technicals(db, ["AAPL"])
     return db
 
 
@@ -125,9 +127,17 @@ def test_views_exist(db):
         "ttm_ebitda",
         "ttm_fcf",
         "trailing_multiples_daily",
-        "technicals_daily",
     ):
         assert v in views, f"missing view: {v}"
+
+    # technicals_daily is now a table (migration 007), not a view
+    tables = {
+        r[0]
+        for r in db.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+        ).fetchall()
+    }
+    assert "technicals_daily" in tables, "missing table: technicals_daily"
 
 
 # ---------------------------------------------------------------------------
@@ -410,13 +420,16 @@ def test_aapl_split_no_discontinuity(loaded_db):
 
 
 def test_ma_20_value(db):
-    """20-day MA is the mean of the last 20 adjusted_close values."""
+    """SMA20 is the mean of the last 20 adjusted_close values."""
+    from src.compute.technicals import recompute_technicals
+
     prices = [(date(2024, 1, i + 1), float(i + 1)) for i in range(25)]
     for dt, p in prices:
         insert_prices(db, [("T", dt, p)])
+    recompute_technicals(db, ["T"])
 
     row = db.execute(
-        "SELECT date, ma_20 FROM technicals_daily WHERE ticker='T' AND date='2024-01-25'"
+        "SELECT date, sma_20 FROM technicals_daily WHERE ticker='T' AND date='2024-01-25'"
     ).fetchone()
     assert row is not None
     expected = sum(i + 1 for i in range(5, 25)) / 20.0  # days 6..25
@@ -425,9 +438,12 @@ def test_ma_20_value(db):
 
 def test_technicals_52w_range(db):
     """52-week high and low reflect the rolling 252-row window."""
+    from src.compute.technicals import recompute_technicals
+
     prices = [(date(2024, 1, 1), 100.0), (date(2024, 6, 1), 150.0), (date(2024, 12, 31), 80.0)]
     for dt, p in prices:
         insert_prices(db, [("T", dt, p)])
+    recompute_technicals(db, ["T"])
 
     row = db.execute(
         "SELECT high_52w, low_52w FROM technicals_daily WHERE ticker='T' AND date='2024-12-31'"
@@ -439,12 +455,15 @@ def test_technicals_52w_range(db):
 
 
 def test_beta_null_without_spy(db):
-    """beta_spy_252d is NULL when SPY is not in prices_daily."""
+    """beta_252d is NULL/NaN when SPY is not in prices_daily."""
+    from src.compute.technicals import recompute_technicals
+
     prices = [(date(2024, 1, i + 1), float(100 + i)) for i in range(10)]
     for dt, p in prices:
         insert_prices(db, [("T", dt, p)])
+    recompute_technicals(db, ["T"])
 
-    rows = db.execute("SELECT beta_spy_252d FROM technicals_daily WHERE ticker='T'").fetchall()
+    rows = db.execute("SELECT beta_252d FROM technicals_daily WHERE ticker='T'").fetchall()
     assert all(
         r[0] is None or math.isnan(r[0]) for r in rows
     ), "beta should be NULL/NaN when SPY has no price data"
@@ -454,10 +473,13 @@ def test_realized_vol_non_negative(db):
     """Realized volatility (annualized) is non-negative."""
     from datetime import timedelta
 
+    from src.compute.technicals import recompute_technicals
+
     start = date(2024, 1, 1)
     prices = [(start + timedelta(days=i), float(100 + (i % 5))) for i in range(70)]
     for dt, p in prices:
         insert_prices(db, [("T", dt, p)])
+    recompute_technicals(db, ["T"])
 
     rows = db.execute(
         "SELECT realized_vol_60d FROM technicals_daily WHERE ticker='T' AND realized_vol_60d IS NOT NULL"
@@ -486,11 +508,11 @@ def test_aapl_trailing_multiples_populated(loaded_db):
 
 
 def test_aapl_technicals_populated(loaded_db):
-    """Technicals view returns MA rows for AAPL after loading price history."""
+    """Technicals table has SMA200 rows for AAPL after loading price history."""
     rows = loaded_db.execute(
-        "SELECT COUNT(*) FROM technicals_daily WHERE ticker='AAPL' AND ma_200 IS NOT NULL"
+        "SELECT COUNT(*) FROM technicals_daily WHERE ticker='AAPL' AND sma_200 IS NOT NULL"
     ).fetchone()[0]
-    assert rows > 0, "expected 200-day MA rows for AAPL"
+    assert rows > 0, "expected 200-day SMA rows for AAPL"
 
 
 # ---------------------------------------------------------------------------

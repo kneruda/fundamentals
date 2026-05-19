@@ -30,6 +30,7 @@ log = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.compute.technicals import recompute_technicals  # noqa: E402
 from src.ingest.orchestrator import ingest_ticker  # noqa: E402
 from src.schema.runner import open_db, warehouse_path  # noqa: E402
 
@@ -101,6 +102,9 @@ def main() -> None:
             except Exception as exc:
                 n_fail += 1
                 log.exception("[%d/%d] %s failed: %s", i, len(tickers), ticker, exc)
+
+        log.info("recomputing technicals for all active tickers")
+        recompute_technicals(con)
     finally:
         con.close()
 
