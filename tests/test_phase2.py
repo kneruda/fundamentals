@@ -110,6 +110,15 @@ def test_prices_no_data_skipped(db):
 # ---------------------------------------------------------------------------
 
 
+def test_httpx_request_logging_is_silenced():
+    """httpx logs full URLs at INFO, and our URLs contain the API token."""
+    import logging
+
+    import src.ingest.fetch  # noqa: F401  (import triggers the logger config)
+
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+
+
 def test_fetch_fundamentals_uses_token(monkeypatch):
     """fetch_fundamentals passes the API token in query params."""
     monkeypatch.setenv("EODHD_API_TOKEN", "test-token-123")

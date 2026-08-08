@@ -5,6 +5,8 @@
 # --- Data (never commit raw vendor files or the warehouse) ---
 data/raw/
 data/archive/
+# Logs contain vendor request URLs with the API token in them.
+data/logs/
 data/warehouse.duckdb
 data/warehouse.duckdb.wal
 *.duckdb

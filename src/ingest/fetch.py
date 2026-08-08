@@ -9,6 +9,11 @@ import yaml
 
 log = logging.getLogger(__name__)
 
+# httpx logs every request at INFO with the full URL, and our URLs carry
+# api_token as a query param. Silence it so the token never reaches a log
+# file. Retries and failures are still logged by _get below.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 _settings_path = Path(__file__).parent.parent.parent / "config" / "settings.yml"
 
 
