@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.ingest.orchestrator import ingest_universe  # noqa: E402
 from src.schema.runner import open_db, warehouse_path  # noqa: E402
+from src.universe import deactivate_delisted  # noqa: E402
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -43,6 +44,8 @@ def main() -> None:
     t0 = time.monotonic()
     try:
         results = ingest_universe(con)
+        # Runs after ingest so it acts on the freshly-loaded is_delisted flag.
+        delisted = deactivate_delisted(con)
     finally:
         con.close()
 
@@ -54,6 +57,8 @@ def main() -> None:
         for ticker, ok, msg in results:
             if not ok:
                 log.warning("  FAILED %s: %s", ticker, msg)
+    if delisted:
+        log.warning("deactivated %d delisted ticker(s): %s", len(delisted), ", ".join(delisted))
 
 
 if __name__ == "__main__":

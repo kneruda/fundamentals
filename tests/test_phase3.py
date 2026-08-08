@@ -166,6 +166,71 @@ def test_remove_add_roundtrip(tmp_path, db, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# deactivate_delisted
+# ---------------------------------------------------------------------------
+
+
+def _insert_security(db, ticker: str, *, delisted: bool) -> None:
+    db.execute(
+        """
+        INSERT INTO security_master (ticker, code, exchange, name, currency_code, is_delisted)
+        VALUES (?, ?, 'US', ?, 'USD', ?)
+        """,
+        [ticker, ticker, ticker, delisted],
+    )
+
+
+def test_deactivate_delisted_flips_only_delisted(db):
+    """A delisted ticker is deactivated; a live one is untouched."""
+    db.execute("INSERT INTO universe (ticker, active) VALUES ('DEAD', true), ('LIVE', true)")
+    _insert_security(db, "DEAD", delisted=True)
+    _insert_security(db, "LIVE", delisted=False)
+
+    from src.universe import deactivate_delisted
+
+    assert deactivate_delisted(db) == ["DEAD"]
+
+    active = dict(db.execute("SELECT ticker, active FROM universe").fetchall())
+    assert active["DEAD"] is False
+    assert active["LIVE"] is True
+
+
+def test_deactivate_delisted_preserves_history(db):
+    """Deactivation is a soft delete — the universe row and price rows survive."""
+    db.execute("INSERT INTO universe (ticker, active) VALUES ('DEAD', true)")
+    _insert_security(db, "DEAD", delisted=True)
+    db.execute("INSERT INTO prices_daily (ticker, date, close) VALUES ('DEAD', '2026-01-02', 1.0)")
+
+    from src.universe import deactivate_delisted
+
+    deactivate_delisted(db)
+
+    assert db.execute("SELECT COUNT(*) FROM universe WHERE ticker='DEAD'").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM prices_daily WHERE ticker='DEAD'").fetchone()[0] == 1
+
+
+def test_deactivate_delisted_is_idempotent(db):
+    """Already-inactive delisted tickers are not reported a second time."""
+    db.execute("INSERT INTO universe (ticker, active) VALUES ('DEAD', true)")
+    _insert_security(db, "DEAD", delisted=True)
+
+    from src.universe import deactivate_delisted
+
+    assert deactivate_delisted(db) == ["DEAD"]
+    assert deactivate_delisted(db) == []
+
+
+def test_deactivate_delisted_ignores_tickers_without_security_master(db):
+    """A universe row with no security_master row is left alone, not dropped."""
+    db.execute("INSERT INTO universe (ticker, active) VALUES ('PENDING', true)")
+
+    from src.universe import deactivate_delisted
+
+    assert deactivate_delisted(db) == []
+    assert db.execute("SELECT active FROM universe WHERE ticker='PENDING'").fetchone()[0] is True
+
+
+# ---------------------------------------------------------------------------
 # list_universe
 # ---------------------------------------------------------------------------
 

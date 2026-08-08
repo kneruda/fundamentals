@@ -46,6 +46,28 @@ def remove_ticker(con: duckdb.DuckDBPyConnection, ticker: str) -> None:
     log.info("removed ticker=%s", ticker)
 
 
+def deactivate_delisted(con: duckdb.DuckDBPyConnection) -> list[str]:
+    """Soft-delete active tickers the vendor has flagged as delisted.
+
+    The vendor keeps serving valid JSON for delisted names, so ingestion
+    succeeds and the price series simply stops. Left active, they feed stale
+    prices into every screen. History is preserved; only active is flipped.
+
+    Returns the tickers deactivated by this call.
+    """
+    rows = con.execute("""
+        SELECT u.ticker FROM universe u
+        JOIN security_master s USING (ticker)
+        WHERE u.active AND s.is_delisted
+        ORDER BY u.ticker
+        """).fetchall()
+    tickers = [r[0] for r in rows]
+    for ticker in tickers:
+        remove_ticker(con, ticker)
+        log.info("deactivated delisted ticker=%s", ticker)
+    return tickers
+
+
 def list_universe(con: duckdb.DuckDBPyConnection, active_only: bool = True) -> pd.DataFrame:
     sql = "SELECT ticker, added_at, active, notes FROM universe"
     if active_only:
