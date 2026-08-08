@@ -54,8 +54,7 @@ two loads on 2026-08-08. DuckDB does not reclaim space from UPSERTs in
 place, so the file grows with churn rather than with data. At roughly
 +750 MB per full load this becomes the largest thing on disk within weeks.
 `CHECKPOINT`, or a periodic `EXPORT DATABASE` / re-import, compacts it —
-see W8.2, which should now be treated as more urgent than its position
-suggests.
+see W0.8, moved into W0 for this reason.
 
 ### Vendor entitlement (checked 2026-08-08)
 
@@ -140,6 +139,7 @@ W4 are unbuildable and two shipped screens stay empty.
 | W0.5 | Staleness banner | | Home page shows "data as of YYYY-MM-DD (N days stale)". Should cover **per-ticker** freshness too, not just the warehouse maximum: EA sat delisted and stale inside a 500-name universe and was invisible until queried directly. |
 | W0.6 | Load-health page | | `load_runs` over time, per-ticker failure streaks, snapshot-coverage sparkline. `queries.snapshot_coverage` already exists and nothing surfaces it. |
 | W0.7 | Post-load digest to file | | One Markdown file per run in `data/logs/`: N ok / M failed, tickers that failed twice running, deactivated tickers, new 52w highs/lows. Precursor to W4. |
+| W0.8 | Warehouse compaction + backup | **Next** | Moved from W8.2. DuckDB does not reclaim UPSERT space, so the file grows ~750 MB per load regardless of new data. `CHECKPOINT` after each load, plus a periodic `EXPORT DATABASE` round-trip to compact. The exported copy doubles as the backup, so both jobs are one piece of work. |
 
 **Definition of done:** 30 consecutive unattended days, and
 `screen_consensus_rating_shift` returns rows. First unattended run is
@@ -251,24 +251,50 @@ Real, non-urgent, mostly from `REVIEW.md` §4:
 | # | Increment |
 |---|---|
 | W8.1 | Read-only Streamlit connection so the UI can't collide with a load |
-| W8.2 | Warehouse backup before each load (DuckDB file copy or `EXPORT DATABASE`) |
+| ~~W8.2~~ | Warehouse backup — **moved to W0.8**. Merged with compaction, since `EXPORT DATABASE` produces both, and disk growth made it urgent |
 | W8.3 | Always-on host (EC2 + EBS + systemd timer) — retires the "did the laptop sleep?" failure mode that caused §1 |
 | W8.4 | FX activation — loader, USD-equivalent views, native/USD toggle. **Trigger: first non-US ticker.** Not before; the universe is 100% USD today |
 
 ## 5. Sequencing
 
-**Next three, in order, nothing else first:**
+**Done 2026-08-08:** W0.1 (backfill), W0.2 (scheduler), W0.2b (delisted
+deactivation). The system is current and runs itself.
 
-1. **W0.1** — backfill the gap. One command, restores 82 days.
-2. **W0.2 + W0.5** — schedule it, and make staleness visible so silent
-   death can't recur.
-3. **W0.3 + W0.4** — retention, before the archive becomes a disk problem.
+The ordering principle from here: **do the work with a deadline first.**
+Disk growth compounds every night at ~1.7 GB per load (≈750 MB warehouse +
+≈940 MB archive) and nothing reclaims it. History accrual, by contrast,
+runs on its own clock now that the scheduler works — the 30-day gate
+arrives in late September whether or not anything else is built. So the
+next block is disk, and the accrual-dependent work happens while waiting.
 
-**Then:** W0.6/W0.7 while snapshot history accrues → W1 (independent of
-accrual, so it parallelizes with the 30-day wait) → W2 once both are in.
+**Next, in order:**
+
+1. **W0.3 + W0.4** — archive retention and hash-skipping unchanged price
+   files. Together they cut nightly archive growth by ~95%.
+2. **W0.8** — `CHECKPOINT` plus a periodic `EXPORT DATABASE` round-trip.
+   Stops the warehouse file compounding and produces the first real backup
+   the project has ever had. There is currently no recovery path if
+   `warehouse.duckdb` is corrupted, which at 2.7 GB and growing is the
+   larger of the two risks.
+3. **W0.5** — staleness visibility, warehouse-level *and* per-ticker. Last
+   in this block because the scheduler is verified and the immediate
+   staleness is resolved; it protects against the *next* silent stall
+   rather than a current one.
+
+**Then, while snapshot history accrues (now → late September):** W0.6 and
+W0.7, then **W1**. W1 is deliberately placed in the waiting period — it
+depends on nothing accruing, so it costs no calendar time, and W2 cannot
+start without it.
+
+**Then:** W2, the flagship, once W0 and W1 are both in.
 
 **Opportunistic, any time:** W3 and W7 have no dependencies and are the
 best filler work while W0 accrues history.
+
+**Deliberately not next:** W5 (data breadth) and W6 (analytics depth) are
+the most appealing items on the list and the easiest to start. Both add
+load to a pipeline whose disk behavior is not yet under control. They come
+after W0.8.
 
 ## 6. Open decisions
 
