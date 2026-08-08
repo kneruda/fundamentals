@@ -4,7 +4,7 @@ import shutil
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
@@ -111,6 +111,45 @@ def fetch_and_ingest(con: duckdb.DuckDBPyConnection, ticker: str) -> None:
     except Exception as exc:
         _record_load_run(con, ticker, "failed", int((time.monotonic() - t0) * 1000), str(exc))
         raise
+
+
+def purge_archive(
+    archive_dir: Path, retention_days: int, *, today: date | None = None
+) -> list[str]:
+    """Delete dated archive directories older than retention_days.
+
+    Directories are named by ISO date (data/archive/2026-08-08). Anything whose
+    name does not parse as a date is left alone — the archive root is not
+    assumed to be exclusively ours. retention_days <= 0 means keep forever.
+
+    Returns the names of the directories removed.
+    """
+    if retention_days <= 0 or not archive_dir.exists():
+        return []
+
+    cutoff = (today or date.today()) - timedelta(days=retention_days)
+    purged: list[str] = []
+    for child in sorted(archive_dir.iterdir()):
+        if not child.is_dir():
+            continue
+        try:
+            stamp = date.fromisoformat(child.name)
+        except ValueError:
+            log.debug("archive: skipping non-dated entry %s", child.name)
+            continue
+        if stamp < cutoff:
+            shutil.rmtree(child)
+            purged.append(child.name)
+            log.info("archive: purged %s (older than %s)", child.name, cutoff.isoformat())
+    return purged
+
+
+def purge_old_archives() -> list[str]:
+    """Settings-driven wrapper around purge_archive, for the daily load."""
+    cfg = _settings()
+    archive_dir = Path(cfg.get("paths", {}).get("archive", "data/archive"))
+    retention_days = cfg.get("ingest", {}).get("archive_retention_days", 0)
+    return purge_archive(archive_dir, retention_days)
 
 
 def _record_load_run(

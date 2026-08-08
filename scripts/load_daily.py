@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.ingest.orchestrator import ingest_universe  # noqa: E402
+from src.ingest.orchestrator import ingest_universe, purge_old_archives  # noqa: E402
 from src.schema.runner import open_db, warehouse_path  # noqa: E402
 from src.universe import deactivate_delisted  # noqa: E402
 
@@ -59,6 +59,11 @@ def main() -> None:
                 log.warning("  FAILED %s: %s", ticker, msg)
     if delisted:
         log.warning("deactivated %d delisted ticker(s): %s", len(delisted), ", ".join(delisted))
+
+    # After the run, so a failed load never costs us the older archives.
+    purged = purge_old_archives()
+    if purged:
+        log.info("purged %d expired archive dir(s): %s", len(purged), ", ".join(purged))
 
 
 if __name__ == "__main__":

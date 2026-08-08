@@ -1,5 +1,6 @@
 """Phase 9: ticker-input parser, bulk loader, load monitoring."""
 
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -349,3 +350,72 @@ def test_universe_management_list_price_range(loaded_db):
     assert row["price_start"] is not None
     assert row["price_end"] is not None
     assert str(row["price_start"]) <= str(row["price_end"])
+
+
+# ---------------------------------------------------------------------------
+# Archive retention (W0.3)
+# ---------------------------------------------------------------------------
+
+
+def _make_archive(root: Path, names: list[str]) -> Path:
+    archive = root / "archive"
+    for name in names:
+        d = archive / name
+        d.mkdir(parents=True)
+        (d / "AAPL-fundamentals.json").write_text("{}")
+    return archive
+
+
+def test_purge_archive_removes_only_expired(tmp_path):
+    """Directories older than the cutoff go; newer ones stay."""
+    from src.ingest.orchestrator import purge_archive
+
+    # 90 days before 2026-08-08 is 2026-05-10, so the May directory expires too.
+    archive = _make_archive(tmp_path, ["2026-01-01", "2026-05-01", "2026-08-01"])
+    purged = purge_archive(archive, 90, today=date(2026, 8, 8))
+
+    assert purged == ["2026-01-01", "2026-05-01"]
+    assert not (archive / "2026-01-01").exists()
+    assert not (archive / "2026-05-01").exists()
+    assert (archive / "2026-08-01").exists()
+
+
+def test_purge_archive_boundary_is_inclusive_of_retention(tmp_path):
+    """A directory exactly retention_days old is kept, not purged."""
+    from src.ingest.orchestrator import purge_archive
+
+    archive = _make_archive(tmp_path, ["2026-05-10", "2026-05-09"])
+    purged = purge_archive(archive, 90, today=date(2026, 8, 8))
+
+    assert purged == ["2026-05-09"]
+    assert (archive / "2026-05-10").exists()
+
+
+def test_purge_archive_zero_retention_keeps_everything(tmp_path):
+    """retention_days = 0 means keep forever — the documented sentinel."""
+    from src.ingest.orchestrator import purge_archive
+
+    archive = _make_archive(tmp_path, ["2020-01-01"])
+    assert purge_archive(archive, 0, today=date(2026, 8, 8)) == []
+    assert (archive / "2020-01-01").exists()
+
+
+def test_purge_archive_ignores_undated_entries(tmp_path):
+    """Anything not named as an ISO date is left alone, however old."""
+    from src.ingest.orchestrator import purge_archive
+
+    archive = _make_archive(tmp_path, ["2020-01-01", "notes", "backup-2020-01-01"])
+    (archive / "README.txt").write_text("keep me")
+
+    purged = purge_archive(archive, 30, today=date(2026, 8, 8))
+
+    assert purged == ["2020-01-01"]
+    assert (archive / "notes").exists()
+    assert (archive / "backup-2020-01-01").exists()
+    assert (archive / "README.txt").exists()
+
+
+def test_purge_archive_missing_dir_is_noop(tmp_path):
+    from src.ingest.orchestrator import purge_archive
+
+    assert purge_archive(tmp_path / "nope", 30, today=date(2026, 8, 8)) == []
