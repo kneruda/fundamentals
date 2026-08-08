@@ -13,39 +13,49 @@ are **complete**. The codebase is healthy: 253 tests passing in ~24 s,
 migrations through `007`, seven working pages, all four mission modes
 delivered.
 
-The problem is not the code. **The system stopped running.**
+The problem was not the code. **The system had stopped running** — for 82
+days, silently. That is now fixed (W0.1, W0.2 below), but the diagnosis is
+worth keeping, because it is the failure mode this project is most exposed
+to and the reason W0 is ordered first:
 
-| Signal | Value | Implication |
+| Signal | Was (2026-08-08, pre-fix) | Now |
 |---|---|---|
-| Latest price bar | 2026-05-18 | ~82 days stale |
-| Days the daily loader has ever run | 4 (May 12, 13, 18, 19) | never automated |
-| `crontab` / launchd agent installed | none | nothing schedules it |
-| `data/logs/` | does not exist | the documented log target was never created |
-| Distinct dates in `daily_forward_snapshot` | 5 | Phase 13B screens gate at ≥30 — they have never returned a row |
+| Latest price bar | 2026-05-18 (~82 days stale) | 2026-08-07 |
+| Days the daily loader had ever run | 4 (May 12, 13, 18, 19) | scheduled 02:00 Mon–Fri, verified |
+| `crontab` / launchd agent | none | `com.fundamentals.load_daily`, exit code 0 |
+| `data/logs/` | did not exist | created; the nightly log lands in `load_daily.err` |
+| Distinct dates in `daily_forward_snapshot` | 5 | 6, accruing from 2026-08-08 |
 
-Two features were designed to earn their value by accruing daily history,
-and neither has: the **snapshot-history forward screens** (consensus
-rating shift, target price raised) and the **growth-acceleration screen**
-(which fills one quarter per ingest because `quarterly_fundamentals`
-UPSERTs on MRQ). Both are correct code sitting on an empty table.
+The 82 days of missing `daily_forward_snapshot` rows are **permanently
+gone** — that table records what the vendor believed on the day we asked,
+and we did not ask. The snapshot-history forward screens gate at 30
+distinct days, so at five runs a week they come alive around late
+September 2026. The growth-acceleration screen fills one quarter per
+ingest and will take about a year to be fully useful.
 
-Everything in section 4 below is secondary to fixing this.
-
-### Current warehouse
+### Current warehouse (2026-08-08, post-backfill)
 
 | Measure | Value |
 |---|---|
-| Active tickers | 507 (1 inactive) |
-| Coverage | 100% US / USD, NYSE 343 + NASDAQ 161 + 4 other |
-| `prices_daily` | 4,382,337 rows, 1962-01-02 → 2026-05-18 |
-| `technicals_daily` | 4,381,692 rows |
-| Statements | 81,020 IS / 81,015 BS / 75,133 CF (64,553 quarterly + 16,467 annual) |
-| `analyst_estimates_history` | 76,770 rows |
-| `earnings_events` | 52,376 rows |
-| Warehouse file | 1.2 GB |
-| `data/raw/` | 942 MB (508 + 508 JSON files) |
-| `data/archive/` | 2.8 GB across 4 dated directories |
+| Active tickers | 503 (5 inactive — 4 delisted, deactivated this session) |
+| Coverage | 100% US / USD, NYSE + NASDAQ + 4 other |
+| `prices_daily` | 4,425,098 rows, 1962-01-02 → 2026-08-07 |
+| `technicals_daily` | 4,424,453 rows |
+| Statements | 81,539 IS / 81,535 BS / 75,647 CF |
+| `analyst_estimates_history` | 96,017 rows |
+| `earnings_events` | 52,943 rows |
+| Warehouse file | 2.7 GB |
+| `data/raw/` | 949 MB (508 + 508 JSON files) |
+| `data/archive/` | 3.7 GB across 5 dated directories |
 | Watchlists | 1 ("Keith's Portfolio", no shares/cost basis populated) |
+
+**Warehouse file growth needs watching.** It went 1.2 GB → 2.7 GB across
+two loads on 2026-08-08. DuckDB does not reclaim space from UPSERTs in
+place, so the file grows with churn rather than with data. At roughly
++750 MB per full load this becomes the largest thing on disk within weeks.
+`CHECKPOINT`, or a periodic `EXPORT DATABASE` / re-import, compacts it —
+see W8.2, which should now be treated as more urgent than its position
+suggests.
 
 ### Vendor entitlement (checked 2026-08-08)
 
@@ -120,18 +130,20 @@ Ordered by dependency, not by appeal. W0 gates W2 and W4. W1 gates W2.
 The whole point of the daily cadence is accrual. Until this lands, W2 and
 W4 are unbuildable and two shipped screens stay empty.
 
-| # | Increment | Notes |
-|---|---|---|
-| W0.1 | Backfill the 82-day gap | One `load_daily.py` run. ~1,014 requests against a 100k limit. Restores prices, statements, estimates. Does **not** recreate the 82 missing snapshot dates — those are gone permanently. |
-| W0.2 | Install the scheduler | launchd agent (macOS) from the README skeleton. `mkdir -p data/logs` first — the documented log path does not exist. Verify with a forced run, not by reading the plist. |
-| W0.3 | Implement archive retention | Wire `ingest.archive_retention_days` to an actual purge in `fetch_and_ingest` or `load_daily`. Currently config theatre; 2.8 GB after 4 days. |
-| W0.4 | Stop archiving unchanged price files | Archive fundamentals daily; archive prices only when the file hash changed. Cuts archive growth by roughly 95%. |
-| W0.5 | Staleness banner | Home page shows "data as of YYYY-MM-DD (N days stale)" in red past a threshold. This failure was silent for 82 days — make it loud. |
-| W0.6 | Load-health page | `load_runs` over time, per-ticker failure streaks, snapshot-coverage sparkline. `queries.snapshot_coverage` already exists and nothing surfaces it. |
-| W0.7 | Post-load digest to file | One Markdown file per run in `data/logs/`: N ok / M failed, tickers that failed twice running, new 52w highs/lows. Precursor to W4. |
+| # | Increment | Status | Notes |
+|---|---|---|---|
+| W0.1 | Backfill the 82-day gap | **Done** 2026-08-08 | 507 ok / 0 failed in 23 min, ~1,014 requests. Prices now to 2026-08-07. Snapshot dates not recoverable, as expected. |
+| W0.2 | Install the scheduler | **Done** 2026-08-08 | launchd agent, 02:00 Mon–Fri, checked in at `scripts/com.fundamentals.load_daily.plist`. Verified by `launchctl kickstart`: run 1, exit code 0, 1m 38s. Needed an `EnvironmentVariables` block the old README skeleton lacked — launchd's minimal env cannot find `uv`. |
+| W0.2b | Deactivate delisted tickers | **Done** 2026-08-08 | Unplanned; found during W0.1. Vendor serves valid JSON for delisted names, so they loaded "ok" with a frozen price series and kept feeding screens. `universe.deactivate_delisted`, called from `load_daily`. BK, CTRA, EA, SATS deactivated. |
+| W0.3 | Implement archive retention | **Next** | Wire `ingest.archive_retention_days` to an actual purge. Currently config theatre; 3.7 GB across 5 dated directories. |
+| W0.4 | Stop archiving unchanged price files | | Archive fundamentals daily; archive prices only when the file hash changed. Cuts archive growth by roughly 95%. |
+| W0.5 | Staleness banner | | Home page shows "data as of YYYY-MM-DD (N days stale)". Should cover **per-ticker** freshness too, not just the warehouse maximum: EA sat delisted and stale inside a 500-name universe and was invisible until queried directly. |
+| W0.6 | Load-health page | | `load_runs` over time, per-ticker failure streaks, snapshot-coverage sparkline. `queries.snapshot_coverage` already exists and nothing surfaces it. |
+| W0.7 | Post-load digest to file | | One Markdown file per run in `data/logs/`: N ok / M failed, tickers that failed twice running, deactivated tickers, new 52w highs/lows. Precursor to W4. |
 
 **Definition of done:** 30 consecutive unattended days, and
-`screen_consensus_rating_shift` returns rows.
+`screen_consensus_rating_shift` returns rows. First unattended run is
+2026-08-10 (Monday); the 30-day gate falls around late September 2026.
 
 ### W1 — Point-in-time truth on prices
 
@@ -318,6 +330,20 @@ Decisions that should outlive any single ticket.
   features depend on daily accrual. A scheduler that silently stops is a
   product failure, which is why W0.5 (staleness banner) ships with W0.2
   rather than "later".
+- **(2026-08-08) A delisted ticker is deactivated automatically.** The
+  vendor keeps serving valid JSON after delisting, so ingest reports `ok`
+  and only the price series stops. `load_daily` now flips
+  `universe.active` off for anything flagged `is_delisted`, logging at
+  WARNING. Soft delete only — history stays, and reactivating is a
+  one-liner if the vendor was wrong.
+- **(2026-08-08) The API token must never reach a log file.** httpx logs
+  full request URLs at INFO and ours carry `api_token`. Silenced in
+  `src/ingest/fetch.py` (the vendor client, so every caller inherits it)
+  rather than per script, and `data/logs/` is gitignored.
+- **(2026-08-08) launchd plists are checked into `scripts/`.** The working
+  configuration — including the `EnvironmentVariables` block without which
+  the agent silently cannot find `uv` — is worth more in version control
+  than a placeholder skeleton in the README.
 
 ## 8. How to use this file
 
