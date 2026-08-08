@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.fundamentals.load_daily</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/keithneruda/.local/bin/uv</string>
+        <string>run</string>
+        <string>python</string>
+        <string>scripts/load_daily.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/keithneruda/CodeProjects/investment/fundamentals</string>
+
+    <!-- launchd starts with a minimal environment; uv and python need these. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/keithneruda/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/keithneruda</string>
+    </dict>
+
+    <!-- 02:00 local, Monday-Friday. Monday's run picks up Friday's close. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+
+    <!-- If the Mac was asleep at 02:00, run once after it wakes. -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/keithneruda/CodeProjects/investment/fundamentals/data/logs/load_daily.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/keithneruda/CodeProjects/investment/fundamentals/data/logs/load_daily.err</string>
+</dict>
+</plist>

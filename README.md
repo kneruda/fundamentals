@@ -53,41 +53,40 @@ colliding with an open Streamlit session (DuckDB allows one writer).
     >> data/logs/cron.log 2>&1
 ```
 
-**macOS launchd** — `~/Library/LaunchAgents/com.fundamentals.load_daily.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>             <string>com.fundamentals.load_daily</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/path/to/uv</string>
-        <string>run</string>
-        <string>python</string>
-        <string>/path/to/fundamentals/scripts/load_daily.py</string>
-    </array>
-    <key>WorkingDirectory</key>  <string>/path/to/fundamentals</string>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>   <integer>2</integer>
-        <key>Minute</key> <integer>0</integer>
-    </dict>
-    <key>StandardOutPath</key>   <string>/path/to/fundamentals/data/logs/load_daily.log</string>
-    <key>StandardErrorPath</key> <string>/path/to/fundamentals/data/logs/load_daily.err</string>
-</dict>
-</plist>
-```
+**macOS launchd** — the working agent is checked in at
+[`scripts/com.fundamentals.load_daily.plist`](scripts/com.fundamentals.load_daily.plist)
+(02:00, Mon–Fri). Edit the absolute paths for your machine, then:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.fundamentals.load_daily.plist
+cp scripts/com.fundamentals.load_daily.plist ~/Library/LaunchAgents/
+plutil -lint ~/Library/LaunchAgents/com.fundamentals.load_daily.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.fundamentals.load_daily.plist
+launchctl print gui/$(id -u)/com.fundamentals.load_daily     # should list the job
 ```
 
-Verify it actually ran — don't assume. `SELECT MAX(date) FROM prices_daily`
-should track the last trading day, and `load_runs` should gain a row per
-ticker per run.
+Every path in the plist must be absolute, including `uv` itself. **launchd
+starts jobs with a near-empty environment**, so the `EnvironmentVariables`
+block setting `PATH` and `HOME` is load-bearing — without it the agent
+registers happily and then fails to find `uv` every night, silently. This
+is the most common way a scheduled load never runs.
+
+Verify it actually ran — don't assume:
+
+```bash
+launchctl kickstart -p gui/$(id -u)/com.fundamentals.load_daily   # force a run now
+tail -f data/logs/load_daily.log
+```
+
+A same-day re-run is cheap: `_fresh_today` skips re-fetching files already
+downloaded today, so the smoke test exercises the environment without
+spending API calls. Afterwards, `SELECT MAX(date) FROM prices_daily` should
+track the last trading day and `load_runs` should gain a row per ticker.
+
+To remove or reinstall after editing:
+
+```bash
+launchctl bootout gui/$(id -u)/com.fundamentals.load_daily
+```
 
 ## Pages
 
