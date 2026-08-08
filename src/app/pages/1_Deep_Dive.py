@@ -64,7 +64,9 @@ def _dividends_annual(_con, ticker: str, mtime: float) -> pd.DataFrame:
 
 
 @st.cache_data
-def _statement(_con, ticker: str, stmt_type: str, period_type: str, depth: str, mtime: float) -> pd.DataFrame:
+def _statement(
+    _con, ticker: str, stmt_type: str, period_type: str, depth: str, mtime: float
+) -> pd.DataFrame:
     return queries.statement(_con, ticker, stmt_type, period_type=period_type, depth=depth)
 
 
@@ -110,9 +112,47 @@ _UNITS: dict[str, tuple[float, str]] = {
     "Raw": (1.0, ""),
 }
 
+_LOOKBACK_OPTIONS: dict[str, int | None] = {
+    "6M": 182,
+    "1Y": 365,
+    "3Y": 1095,
+    "5Y": 1825,
+    "Max": None,
+}
+
+_IS_LABELS = {
+    "total_revenue": "Revenue",
+    "gross_profit": "Gross Profit",
+    "ebitda": "EBITDA",
+    "operating_income": "Operating Income",
+    "net_income": "Net Income",
+    "interest_expense": "Interest Expense",
+    "research_development": "R&D",
+}
+
+_BS_LABELS = {
+    "cash_and_short_term_investments": "Cash & ST Investments",
+    "total_current_assets": "Total Current Assets",
+    "total_assets": "Total Assets",
+    "total_current_liabilities": "Total Current Liabilities",
+    "long_term_debt_total": "Long-Term Debt",
+    "short_term_debt": "Short-Term Debt",
+    "total_stockholder_equity": "Stockholder Equity",
+    "net_debt": "Net Debt (computed)",
+}
+
+_CF_LABELS = {
+    "total_cash_from_operating_activities": "Operating CF",
+    "capital_expenditures": "CapEx",
+    "free_cash_flow": "Free Cash Flow",
+    "dividends_paid": "Dividends Paid",
+    "net_borrowings": "Net Borrowings",
+}
+
 
 def _apply_units(df: pd.DataFrame, divisor: float, suffix: str) -> pd.DataFrame:
     """Divide all numeric cells by divisor and format with suffix."""
+
     def _fmt(v: object) -> str:
         if pd.isna(v) or not isinstance(v, (int, float)):
             return "—"
@@ -481,34 +521,6 @@ def main() -> None:
         period_type = "quarterly" if period_label == "Quarterly" else "annual"
         depth = depth_label.lower()
         divisor, suffix = _UNITS[units_label]
-        n_periods = 8 if period_type == "quarterly" else 5
-
-        _IS_LABELS = {
-            "total_revenue": "Revenue",
-            "gross_profit": "Gross Profit",
-            "ebitda": "EBITDA",
-            "operating_income": "Operating Income",
-            "net_income": "Net Income",
-            "interest_expense": "Interest Expense",
-            "research_development": "R&D",
-        }
-        _BS_LABELS = {
-            "cash_and_short_term_investments": "Cash & ST Investments",
-            "total_current_assets": "Total Current Assets",
-            "total_assets": "Total Assets",
-            "total_current_liabilities": "Total Current Liabilities",
-            "long_term_debt_total": "Long-Term Debt",
-            "short_term_debt": "Short-Term Debt",
-            "total_stockholder_equity": "Stockholder Equity",
-            "net_debt": "Net Debt (computed)",
-        }
-        _CF_LABELS = {
-            "total_cash_from_operating_activities": "Operating CF",
-            "capital_expenditures": "CapEx",
-            "free_cash_flow": "Free Cash Flow",
-            "dividends_paid": "Dividends Paid",
-            "net_borrowings": "Net Borrowings",
-        }
 
         sub_is, sub_bs, sub_cf = st.tabs(["Income Statement", "Balance Sheet", "Cash Flow"])
 
@@ -549,7 +561,6 @@ def main() -> None:
     # Technicals tab
     # -------------------------------------------------------------------------
     with tab_tech:
-        _LOOKBACK_OPTIONS = {"6M": 182, "1Y": 365, "3Y": 1095, "5Y": 1825, "Max": None}
         range_key = st.radio(
             "Range", list(_LOOKBACK_OPTIONS.keys()), horizontal=True, index=1, key="tech_range"
         )
@@ -574,7 +585,10 @@ def main() -> None:
             bb_low_val = latest.get("bb_lower")
 
             def _bb_position(price, low_b, mid_b, high_b):
-                if any(v is None or (isinstance(v, float) and pd.isna(v)) for v in [price, low_b, mid_b, high_b]):
+                if any(
+                    v is None or (isinstance(v, float) and pd.isna(v))
+                    for v in [price, low_b, mid_b, high_b]
+                ):
                     return "—", "off"
                 if price < mid_b:
                     return "Lower band", "inverse"
@@ -588,15 +602,32 @@ def main() -> None:
             sig_c1.metric(
                 "RSI(14)",
                 _fmt(rsi, "{:.1f}"),
-                "Oversold" if rsi is not None and not pd.isna(rsi) and rsi < 30
-                else ("Overbought" if rsi is not None and not pd.isna(rsi) and rsi > 70 else "Neutral"),
-                delta_color="inverse" if rsi is not None and not pd.isna(rsi) and rsi > 70 else "normal",
+                (
+                    "Oversold"
+                    if rsi is not None and not pd.isna(rsi) and rsi < 30
+                    else (
+                        "Overbought"
+                        if rsi is not None and not pd.isna(rsi) and rsi > 70
+                        else "Neutral"
+                    )
+                ),
+                delta_color=(
+                    "inverse" if rsi is not None and not pd.isna(rsi) and rsi > 70 else "normal"
+                ),
             )
             sig_c2.metric(
                 "MACD Histogram",
                 _fmt(macd_hist, "{:+.3f}"),
-                "Bullish" if macd_hist is not None and not pd.isna(macd_hist) and macd_hist > 0 else "Bearish",
-                delta_color="normal" if macd_hist is not None and not pd.isna(macd_hist) and macd_hist > 0 else "inverse",
+                (
+                    "Bullish"
+                    if macd_hist is not None and not pd.isna(macd_hist) and macd_hist > 0
+                    else "Bearish"
+                ),
+                delta_color=(
+                    "normal"
+                    if macd_hist is not None and not pd.isna(macd_hist) and macd_hist > 0
+                    else "inverse"
+                ),
             )
             sig_c3.metric("BB Position", bb_pos_label, delta_color=bb_delta_color)
             sig_c4.metric("% from SMA200", _fmt(pct_sma200, "{:+.1%}"))
@@ -604,7 +635,11 @@ def main() -> None:
             sig_c6.metric(
                 "Vol Ratio",
                 _fmt(vol_ratio, "{:.2f}×"),
-                "Spike" if vol_ratio is not None and not pd.isna(vol_ratio) and vol_ratio > 2.0 else None,
+                (
+                    "Spike"
+                    if vol_ratio is not None and not pd.isna(vol_ratio) and vol_ratio > 2.0
+                    else None
+                ),
                 delta_color="normal",
             )
 
@@ -639,13 +674,20 @@ def main() -> None:
                         name="Price",
                         showlegend=False,
                     ),
-                    row=1, col=1,
+                    row=1,
+                    col=1,
                 )
             else:
                 fig.add_trace(
-                    go.Scatter(x=dates, y=tech["adjusted_close"], name="Price", mode="lines",
-                               line=dict(color="#4a90e2", width=1.5)),
-                    row=1, col=1,
+                    go.Scatter(
+                        x=dates,
+                        y=tech["adjusted_close"],
+                        name="Price",
+                        mode="lines",
+                        line=dict(color="#4a90e2", width=1.5),
+                    ),
+                    row=1,
+                    col=1,
                 )
 
             for col, label, color in [
@@ -656,9 +698,15 @@ def main() -> None:
                 valid = tech.dropna(subset=[col])
                 if not valid.empty:
                     fig.add_trace(
-                        go.Scatter(x=valid["date"].astype(str), y=valid[col], name=label,
-                                   mode="lines", line=dict(color=color, width=1, dash="dot")),
-                        row=1, col=1,
+                        go.Scatter(
+                            x=valid["date"].astype(str),
+                            y=valid[col],
+                            name=label,
+                            mode="lines",
+                            line=dict(color=color, width=1, dash="dot"),
+                        ),
+                        row=1,
+                        col=1,
                     )
 
             if show_bb:
@@ -670,10 +718,16 @@ def main() -> None:
                     valid = tech.dropna(subset=[col])
                     if not valid.empty:
                         fig.add_trace(
-                            go.Scatter(x=valid["date"].astype(str), y=valid[col], name=label,
-                                       mode="lines", line=dict(color=color, width=1, dash="dash"),
-                                       showlegend=False),
-                            row=1, col=1,
+                            go.Scatter(
+                                x=valid["date"].astype(str),
+                                y=valid[col],
+                                name=label,
+                                mode="lines",
+                                line=dict(color=color, width=1, dash="dash"),
+                                showlegend=False,
+                            ),
+                            row=1,
+                            col=1,
                         )
 
             # Row 2: Volume
@@ -682,29 +736,47 @@ def main() -> None:
                 for c2, o2 in zip(
                     tech["close"].fillna(tech["adjusted_close"]),
                     tech["open"].fillna(tech["adjusted_close"]),
+                    strict=True,
                 )
             ]
             fig.add_trace(
-                go.Bar(x=dates, y=tech["volume"], name="Volume",
-                       marker_color=vol_colors, showlegend=False),
-                row=2, col=1,
+                go.Bar(
+                    x=dates,
+                    y=tech["volume"],
+                    name="Volume",
+                    marker_color=vol_colors,
+                    showlegend=False,
+                ),
+                row=2,
+                col=1,
             )
             vol_sma_valid = tech.dropna(subset=["volume_sma_50"])
             if not vol_sma_valid.empty:
                 fig.add_trace(
-                    go.Scatter(x=vol_sma_valid["date"].astype(str), y=vol_sma_valid["volume_sma_50"],
-                               name="Vol SMA50", mode="lines",
-                               line=dict(color="#f39c12", width=1)),
-                    row=2, col=1,
+                    go.Scatter(
+                        x=vol_sma_valid["date"].astype(str),
+                        y=vol_sma_valid["volume_sma_50"],
+                        name="Vol SMA50",
+                        mode="lines",
+                        line=dict(color="#f39c12", width=1),
+                    ),
+                    row=2,
+                    col=1,
                 )
 
             # Row 3: RSI
             rsi_valid = tech.dropna(subset=["rsi_14"])
             if not rsi_valid.empty:
                 fig.add_trace(
-                    go.Scatter(x=rsi_valid["date"].astype(str), y=rsi_valid["rsi_14"],
-                               name="RSI(14)", mode="lines", line=dict(color="#3498db", width=1.5)),
-                    row=3, col=1,
+                    go.Scatter(
+                        x=rsi_valid["date"].astype(str),
+                        y=rsi_valid["rsi_14"],
+                        name="RSI(14)",
+                        mode="lines",
+                        line=dict(color="#3498db", width=1.5),
+                    ),
+                    row=3,
+                    col=1,
                 )
             fig.add_hline(y=70, line=dict(color="#e74c3c", width=1, dash="dash"), row=3, col=1)
             fig.add_hline(y=30, line=dict(color="#2ecc71", width=1, dash="dash"), row=3, col=1)
@@ -715,25 +787,42 @@ def main() -> None:
             macd_valid = tech.dropna(subset=["macd", "macd_signal"])
             if not macd_valid.empty:
                 fig.add_trace(
-                    go.Scatter(x=macd_valid["date"].astype(str), y=macd_valid["macd"],
-                               name="MACD", mode="lines", line=dict(color="#3498db", width=1.5)),
-                    row=4, col=1,
+                    go.Scatter(
+                        x=macd_valid["date"].astype(str),
+                        y=macd_valid["macd"],
+                        name="MACD",
+                        mode="lines",
+                        line=dict(color="#3498db", width=1.5),
+                    ),
+                    row=4,
+                    col=1,
                 )
                 fig.add_trace(
-                    go.Scatter(x=macd_valid["date"].astype(str), y=macd_valid["macd_signal"],
-                               name="Signal", mode="lines", line=dict(color="#e74c3c", width=1)),
-                    row=4, col=1,
+                    go.Scatter(
+                        x=macd_valid["date"].astype(str),
+                        y=macd_valid["macd_signal"],
+                        name="Signal",
+                        mode="lines",
+                        line=dict(color="#e74c3c", width=1),
+                    ),
+                    row=4,
+                    col=1,
                 )
             hist_valid = tech.dropna(subset=["macd_histogram"])
             if not hist_valid.empty:
                 hist_colors = [
-                    "#2ecc71" if v >= 0 else "#e74c3c"
-                    for v in hist_valid["macd_histogram"]
+                    "#2ecc71" if v >= 0 else "#e74c3c" for v in hist_valid["macd_histogram"]
                 ]
                 fig.add_trace(
-                    go.Bar(x=hist_valid["date"].astype(str), y=hist_valid["macd_histogram"],
-                           name="Histogram", marker_color=hist_colors, showlegend=False),
-                    row=4, col=1,
+                    go.Bar(
+                        x=hist_valid["date"].astype(str),
+                        y=hist_valid["macd_histogram"],
+                        name="Histogram",
+                        marker_color=hist_colors,
+                        showlegend=False,
+                    ),
+                    row=4,
+                    col=1,
                 )
 
             fig.update_layout(

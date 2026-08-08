@@ -31,7 +31,9 @@ from src.ticker_input import parse_ticker_input  # noqa: E402
 def main() -> None:
     parser = argparse.ArgumentParser(description="Bulk-load tickers into the warehouse.")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--file", type=Path, metavar="FILE", help="Text file of tickers (one per line)")
+    group.add_argument(
+        "--file", type=Path, metavar="FILE", help="Text file of tickers (one per line)"
+    )
     group.add_argument("--resume", metavar="JOB_ID", help="Resume an existing bulk-load job")
     args = parser.parse_args()
 

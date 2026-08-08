@@ -27,7 +27,9 @@ def _drill_down_dialog(con, ticker: str) -> None:
 
     with tab_prices:
         col_ps, col_from, col_to = st.columns([1, 1, 1])
-        page_size = col_ps.selectbox("Rows per page", [50, 100, 250, 500], index=1, key=f"ps_{ticker}")
+        page_size = col_ps.selectbox(
+            "Rows per page", [50, 100, 250, 500], index=1, key=f"ps_{ticker}"
+        )
         date_from = col_from.date_input("From", value=None, key=f"df_{ticker}")
         date_to = col_to.date_input("To", value=None, key=f"dt_{ticker}")
 
@@ -45,14 +47,22 @@ def _drill_down_dialog(con, ticker: str) -> None:
             )
             offset = (page_num - 1) * page_size
             df_prices = queries.prices_page(
-                con, ticker, page_size=page_size, offset=offset,
-                date_from=date_from_str, date_to=date_to_str,
+                con,
+                ticker,
+                page_size=page_size,
+                offset=offset,
+                date_from=date_from_str,
+                date_to=date_to_str,
             )
-            st.caption(f"{total:,} rows total — showing {offset + 1}–{min(offset + page_size, total)}")
+            st.caption(
+                f"{total:,} rows total — showing {offset + 1}–{min(offset + page_size, total)}"
+            )
             st.dataframe(df_prices, hide_index=True, width="stretch")
 
     with tab_fundamentals:
-        period = st.radio("Period", ["Quarterly", "Annual"], horizontal=True, key=f"period_{ticker}")
+        period = st.radio(
+            "Period", ["Quarterly", "Annual"], horizontal=True, key=f"period_{ticker}"
+        )
         period_type = "quarterly" if period == "Quarterly" else "annual"
         n_periods = 8 if period_type == "quarterly" else 5
 
@@ -101,8 +111,7 @@ def _run_refresh_all(con, active_tickers: list[str]) -> None:
         done = state["done"]
         current = state["current"]
         status_slot.markdown(
-            f"**Fetched** {fetched} / {n} &nbsp;&nbsp;|&nbsp;&nbsp; "
-            f"**Ingested** {done} / {n}"
+            f"**Fetched** {fetched} / {n} &nbsp;&nbsp;|&nbsp;&nbsp; " f"**Ingested** {done} / {n}"
         )
         bar.progress(min(done / n, 1.0) if n else 1.0)
         if current:
@@ -158,15 +167,29 @@ def main() -> None:
     else:
         display = df[
             [
-                "ticker", "name", "sector", "added_at",
-                "last_load_at", "load_status", "price_start", "price_end",
-                "active", "notes",
+                "ticker",
+                "name",
+                "sector",
+                "added_at",
+                "last_load_at",
+                "load_status",
+                "price_start",
+                "price_end",
+                "active",
+                "notes",
             ]
         ].copy()
         display.columns = [
-            "Ticker", "Name", "Sector", "Added",
-            "Last Load", "Status", "Price Start", "Price End",
-            "Active", "Notes",
+            "Ticker",
+            "Name",
+            "Sector",
+            "Added",
+            "Last Load",
+            "Status",
+            "Price Start",
+            "Price End",
+            "Active",
+            "Notes",
         ]
         st.dataframe(display, hide_index=True, width="stretch", height=_TABLE_HEIGHT)
 

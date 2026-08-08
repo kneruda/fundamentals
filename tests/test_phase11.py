@@ -140,7 +140,6 @@ def test_statement_summary_has_required_cols(loaded_db):
 
 def test_units_math(loaded_db):
     """Known value 1.234e9 displays correctly for each unit setting."""
-    import pandas as pd
 
     from src.app.queries import statement
 

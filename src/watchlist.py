@@ -63,7 +63,9 @@ def get_membership(con: duckdb.DuckDBPyConnection, watchlist_id_or_name: int | s
     return [r[0] for r in rows]
 
 
-def replace_membership(con: duckdb.DuckDBPyConnection, watchlist_id: int, tickers: list[str]) -> None:
+def replace_membership(
+    con: duckdb.DuckDBPyConnection, watchlist_id: int, tickers: list[str]
+) -> None:
     """Replace all members of a watchlist with the given ticker list."""
     con.execute("BEGIN")
     try:

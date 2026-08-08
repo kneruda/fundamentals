@@ -54,7 +54,8 @@ def sector_constituents(
     display_filter: list[str] | None = None,
 ) -> pd.DataFrame:
     """Individual ticker metrics for a sector."""
-    df = con.execute("""
+    df = con.execute(
+        """
         WITH latest_mult AS (
             SELECT tm.*
             FROM trailing_multiples_daily tm
@@ -102,7 +103,9 @@ def sector_constituents(
         WHERE u.active = true
           AND COALESCE(sm.gic_sector, sm.sector, 'Unknown') = ?
         ORDER BY sm.name NULLS LAST, u.ticker
-    """, [sector]).df()
+    """,
+        [sector],
+    ).df()
     if display_filter is not None:
         df = df[df["ticker"].isin(display_filter)]
     return df.reset_index(drop=True)

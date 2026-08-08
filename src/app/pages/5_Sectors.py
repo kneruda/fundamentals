@@ -52,7 +52,6 @@ def _sector_constituents(_con, sector: str, mtime: float):
     return queries.sector_constituents(_con, sector)
 
 
-
 def main() -> None:
     con = _get_con()
     mtime = queries.warehouse_mtime()
@@ -75,7 +74,9 @@ def main() -> None:
     summary_display = summary.rename(columns=_SUMMARY_LABELS)
     float_cols = summary_display.select_dtypes(include="float").columns
     summary_fmt = {col: "{:.1f}" for col in float_cols}
-    st.dataframe(summary_display.style.format(summary_fmt, na_rep="—"), hide_index=True, width="stretch")
+    st.dataframe(
+        summary_display.style.format(summary_fmt, na_rep="—"), hide_index=True, width="stretch"
+    )
 
     st.markdown("---")
     st.subheader("Sector Drill-Down")
@@ -94,7 +95,9 @@ def main() -> None:
             )
             float_cols = display.select_dtypes(include="float").columns
             const_fmt = {col: "{:.1f}" for col in float_cols}
-            st.dataframe(display.style.format(const_fmt, na_rep="—"), hide_index=True, width="stretch")
+            st.dataframe(
+                display.style.format(const_fmt, na_rep="—"), hide_index=True, width="stretch"
+            )
 
 
 main()

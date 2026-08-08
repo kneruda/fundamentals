@@ -84,8 +84,12 @@ def test_prices_page_offset(loaded_db):
     page1 = prices_page(loaded_db, "AAPL", page_size=10, offset=0)
     page2 = prices_page(loaded_db, "AAPL", page_size=10, offset=10)
     # Pages must not overlap
-    assert page1["date"].iloc[-1] > page2["date"].iloc[0] or page2.empty or page1.empty or \
-        set(page1["date"].tolist()).isdisjoint(set(page2["date"].tolist()))
+    assert (
+        page1["date"].iloc[-1] > page2["date"].iloc[0]
+        or page2.empty
+        or page1.empty
+        or set(page1["date"].tolist()).isdisjoint(set(page2["date"].tolist()))
+    )
 
 
 def test_prices_page_respects_size(loaded_db):
@@ -102,8 +106,9 @@ def test_prices_page_date_filter(loaded_db):
 
     from src.app.queries import prices_page
 
-    df = prices_page(loaded_db, "AAPL", page_size=500, offset=0,
-                     date_from="2020-01-01", date_to="2020-12-31")
+    df = prices_page(
+        loaded_db, "AAPL", page_size=500, offset=0, date_from="2020-01-01", date_to="2020-12-31"
+    )
     if not df.empty:
         assert df["date"].max() <= pd.Timestamp("2020-12-31")
         assert df["date"].min() >= pd.Timestamp("2020-01-01")

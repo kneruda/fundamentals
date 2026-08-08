@@ -59,9 +59,7 @@ def main() -> None:
     with st.expander("Create new watchlist", expanded=watchlists.empty):
         name_input = st.text_input("Name", key="wl_name_input")
         desc_input = st.text_input("Description (optional)", key="wl_desc_input")
-        raw_text = st.text_area(
-            "Tickers (one per line)", height=120, key="wl_tickers_text"
-        )
+        raw_text = st.text_area("Tickers (one per line)", height=120, key="wl_tickers_text")
         uploaded = st.file_uploader("Or upload a .txt file", type=["txt"], key="wl_file_upload")
         if uploaded is not None:
             raw_text = uploaded.read().decode()

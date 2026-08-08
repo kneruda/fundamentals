@@ -1,6 +1,5 @@
 """Phase 9: ticker-input parser, bulk loader, load monitoring."""
 
-import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -127,9 +126,7 @@ def test_load_runs_recorded_on_failure(db, tmp_path):
         with pytest.raises(ValueError):
             fetch_and_ingest(db, "FAKE")
 
-    row = db.execute(
-        "SELECT status, error_message FROM load_runs WHERE ticker = 'FAKE'"
-    ).fetchone()
+    row = db.execute("SELECT status, error_message FROM load_runs WHERE ticker = 'FAKE'").fetchone()
     assert row is not None
     assert row[0] == "failed"
     assert "bad ticker" in row[1]
@@ -245,9 +242,7 @@ def test_run_job_no_pending_returns_empty(db):
     from src.ingest.bulk import create_job, run_job
 
     job_id = create_job(db, ["AAPL"])
-    db.execute(
-        "UPDATE bulk_load_jobs SET status = 'ok' WHERE job_id = ?", [job_id]
-    )
+    db.execute("UPDATE bulk_load_jobs SET status = 'ok' WHERE job_id = ?", [job_id])
 
     results = run_job(db, job_id)
     assert results == []

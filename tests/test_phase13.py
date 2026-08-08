@@ -211,7 +211,9 @@ def test_rating_shift_detects_change(db):
             """,
             ["AAPL", snap_date, rating, 200.0],
         )
-    df, n_excluded = screen_consensus_rating_shift(db, lookback_days=30, min_shift=1.0, min_history_days=30)
+    df, n_excluded = screen_consensus_rating_shift(
+        db, lookback_days=30, min_shift=1.0, min_history_days=30
+    )
     assert n_excluded == 0
     assert "AAPL" in df["ticker"].values
 
@@ -254,7 +256,9 @@ def test_target_price_raised_detects_change(db):
             """,
             ["AAPL", snap_date, 4.0, tp],
         )
-    df, n_excluded = screen_target_price_raised(db, lookback_days=30, min_change_pct=5.0, min_history_days=30)
+    df, n_excluded = screen_target_price_raised(
+        db, lookback_days=30, min_change_pct=5.0, min_history_days=30
+    )
     assert n_excluded == 0
     assert "AAPL" in df["ticker"].values
 
@@ -267,6 +271,5 @@ def test_target_price_raised_detects_change(db):
 def test_13a_display_filter_applied(loaded_db):
     from src.screens.forward_vendor import screen_net_upward_eps_revisions
 
-    df_all = screen_net_upward_eps_revisions(loaded_db, min_net=1)
     df_none = screen_net_upward_eps_revisions(loaded_db, min_net=1, display_filter=["NONEXISTENT"])
     assert len(df_none) == 0 or df_none.empty
