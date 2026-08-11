@@ -21,6 +21,7 @@ dependencies = [
     # Charting (Streamlit re-exports plotly via st.plotly_chart)
     "plotly>=5.20.0",
     "matplotlib>=3.10.9",
+    "watchdog>=6.0.0",
 ]
 
 [project.optional-dependencies]
