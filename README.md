@@ -26,6 +26,27 @@ uv run streamlit run src/app/Home.py         # UI on :8501
 
 Use the **Universe** page to add, remove, and bulk-load tickers.
 
+## Web API and frontend
+
+The Streamlit application remains available during the web-frontend migration.
+Run the FastAPI adapter locally with:
+
+```bash
+uv run uvicorn src.api.main:app --reload
+```
+
+It serves OpenAPI documentation at `http://127.0.0.1:8000/docs`; the API is
+versioned under `/api/v1`.
+
+The React frontend lives in `frontend/`. Once dependencies are installed, run
+it alongside the API with:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
 ## Daily operation
 
 **This matters more than it looks.** Two features — the snapshot-history
