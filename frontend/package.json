@@ -1,0 +1,26 @@
+{
+  "name": "fundamentals-dashboard-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "generate:api": "openapi-typescript http://127.0.0.1:8000/openapi.json -o src/api/generated.ts"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "ag-grid-community": "latest",
+    "ag-grid-react": "latest",
+    "echarts": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "openapi-typescript": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}
