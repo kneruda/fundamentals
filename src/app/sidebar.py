@@ -3,7 +3,7 @@
 import duckdb
 import streamlit as st
 
-from src.app import queries
+from src.services.watchlists import available_watchlists, display_filter_for_watchlist
 
 
 def watchlist_selector(con: duckdb.DuckDBPyConnection) -> list[str] | None:
@@ -12,7 +12,7 @@ def watchlist_selector(con: duckdb.DuckDBPyConnection) -> list[str] | None:
     Persists the selected watchlist_id in st.session_state["active_watchlist_id"].
     Returns None when "Full universe" is selected; returns a list of ticker strings otherwise.
     """
-    watchlists = queries.list_watchlists(con)
+    watchlists = available_watchlists(con)
     options = ["Full universe"] + watchlists["name"].tolist()
 
     # Determine default selection from session state
@@ -36,4 +36,4 @@ def watchlist_selector(con: duckdb.DuckDBPyConnection) -> list[str] | None:
     row = watchlists[watchlists["name"] == selected].iloc[0]
     wid = int(row["watchlist_id"])
     st.session_state["active_watchlist_id"] = wid
-    return queries.get_watchlist_membership(con, wid)
+    return display_filter_for_watchlist(con, wid)

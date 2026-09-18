@@ -10,8 +10,8 @@ import streamlit as st
 from dotenv import load_dotenv
 from plotly.subplots import make_subplots
 
-from src.app import queries
 from src.ingest.fetch import fetch_news
+from src.services import queries
 
 load_dotenv()
 

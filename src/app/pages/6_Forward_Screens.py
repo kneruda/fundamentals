@@ -8,8 +8,9 @@ Section B — Snapshot history: require >= 30 days of daily_forward_snapshot acc
 import pandas as pd
 import streamlit as st
 
-from src.app import queries
 from src.app import sidebar as app_sidebar
+from src.services import queries
+from src.services.screeners import run_forward_screen
 from src.watchlist import create_watchlist
 
 st.set_page_config(page_title="Forward Screens", layout="wide")
@@ -111,13 +112,16 @@ def main() -> None:
             "Next Y (+1y)": "+1y",
         }
         period_lbl = st.sidebar.selectbox("Period", list(period_opts.keys()), key="eps_rev_period")
-        df = queries.screen_eps_revised_up(
+        df = run_forward_screen(
             con,
-            lookback_days=int(lookback),
-            min_delta_pct=float(min_delta),
-            period_filter=period_opts[period_lbl],
             display_filter=display_filter,
-        )
+            screen="eps_revised_up",
+            filters={
+                "lookback_days": int(lookback),
+                "min_delta_pct": float(min_delta),
+                "period_filter": period_opts[period_lbl],
+            },
+        ).rows
         if df.empty:
             st.info("No tickers match.")
         else:
@@ -148,13 +152,16 @@ def main() -> None:
             "Next Y (+1y)": "+1y",
         }
         period_lbl = st.sidebar.selectbox("Period", list(period_opts.keys()), key="net_rev_period")
-        df = queries.screen_net_upward_eps_revisions(
+        df = run_forward_screen(
             con,
-            lookback_days=int(lookback),
-            min_net=int(min_net),
-            period_filter=period_opts[period_lbl],
             display_filter=display_filter,
-        )
+            screen="net_upward_eps_revisions",
+            filters={
+                "lookback_days": int(lookback),
+                "min_net": int(min_net),
+                "period_filter": period_opts[period_lbl],
+            },
+        ).rows
         if df.empty:
             st.info("No tickers match.")
         else:
@@ -181,12 +188,15 @@ def main() -> None:
         min_fwd_delta = st.sidebar.number_input(
             "Min fwd EPS delta %", min_value=0.0, max_value=20.0, value=0.0, step=0.5, key="bnr_fwd"
         )
-        df = queries.screen_beat_and_revise(
+        df = run_forward_screen(
             con,
-            min_surprise_pct=float(min_surprise),
-            min_eps_delta_pct=float(min_fwd_delta),
             display_filter=display_filter,
-        )
+            screen="beat_and_revise",
+            filters={
+                "min_surprise_pct": float(min_surprise),
+                "min_eps_delta_pct": float(min_fwd_delta),
+            },
+        ).rows
         if df.empty:
             st.info("No tickers match.")
         else:
@@ -226,13 +236,17 @@ def main() -> None:
         min_shift = st.sidebar.number_input(
             "Min rating shift", min_value=0.1, max_value=4.0, value=0.5, step=0.1, key="rating_min"
         )
-        df, n_excluded = queries.screen_consensus_rating_shift(
+        result = run_forward_screen(
             con,
-            lookback_days=int(lookback),
-            min_shift=float(min_shift),
-            min_history_days=MIN_HISTORY_DAYS,
             display_filter=display_filter,
+            screen="consensus_rating_shift",
+            filters={
+                "lookback_days": int(lookback),
+                "min_shift": float(min_shift),
+                "min_history_days": MIN_HISTORY_DAYS,
+            },
         )
+        df, n_excluded = result.rows, result.excluded_count
         if n_excluded:
             st.info(
                 f"{n_excluded} ticker(s) excluded — insufficient snapshot history (< {MIN_HISTORY_DAYS} days)."
@@ -259,13 +273,17 @@ def main() -> None:
         min_change = st.sidebar.number_input(
             "Min TP change %", min_value=0.1, max_value=50.0, value=5.0, step=0.5, key="tp_min"
         )
-        df, n_excluded = queries.screen_target_price_raised(
+        result = run_forward_screen(
             con,
-            lookback_days=int(lookback),
-            min_change_pct=float(min_change),
-            min_history_days=MIN_HISTORY_DAYS,
             display_filter=display_filter,
+            screen="target_price_raised",
+            filters={
+                "lookback_days": int(lookback),
+                "min_change_pct": float(min_change),
+                "min_history_days": MIN_HISTORY_DAYS,
+            },
         )
+        df, n_excluded = result.rows, result.excluded_count
         if n_excluded:
             st.info(
                 f"{n_excluded} ticker(s) excluded — insufficient snapshot history (< {MIN_HISTORY_DAYS} days)."

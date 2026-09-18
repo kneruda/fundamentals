@@ -2,8 +2,9 @@
 
 import streamlit as st
 
-from src.app import queries
 from src.app import sidebar as app_sidebar
+from src.services import queries
+from src.services.screeners import run_fundamental_screen
 from src.watchlist import create_watchlist
 
 st.set_page_config(page_title="Screens", layout="wide")
@@ -248,8 +249,7 @@ def main() -> None:
     st.subheader(screen_name)
     st.caption(_DESCRIPTIONS[screen_key])
 
-    screen_fn = getattr(queries, f"screen_{screen_key}")
-    df = screen_fn(con, display_filter=display_filter, **kwargs)
+    df = run_fundamental_screen(con, screen_key, display_filter=display_filter, filters=kwargs).rows
 
     if df.empty:
         st.info("No tickers match the current filters.")

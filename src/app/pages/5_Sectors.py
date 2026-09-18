@@ -2,8 +2,8 @@
 
 import streamlit as st
 
-from src.app import queries
 from src.app import sidebar as app_sidebar
+from src.services import queries
 
 st.set_page_config(page_title="Sectors", layout="wide")
 
