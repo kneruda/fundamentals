@@ -12,7 +12,18 @@ export async function runFundamentalScreen(screen: string, filters: Record<strin
 export async function getTable(path: string): Promise<TableResponse> {
   const response = await fetch(`/api/v1/${path}`);
   if (!response.ok) throw new Error("Unable to load data");
-  return response.json() as Promise<TableResponse>;
+  const payload: unknown = await response.json();
+  if (Array.isArray(payload)) {
+    const rows = payload as Record<string, unknown>[];
+    return { columns: Object.keys(rows[0] ?? {}).map(key => ({ key, label: key.replaceAll("_", " "), format: "text" })), rows, total: rows.length, excluded_count: 0 };
+  }
+  return payload as TableResponse;
+}
+
+export async function getJson<T>(path: string): Promise<T> {
+  const response = await fetch(`/api/v1/${path}`);
+  if (!response.ok) throw new Error("Unable to load data");
+  return response.json() as Promise<T>;
 }
 
 export async function runScreen(family: string, screen: string, filters: Record<string, unknown>): Promise<TableResponse> {
