@@ -26,6 +26,12 @@ export async function getJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export async function requestJson<T>(path: string, method: string, body?: unknown): Promise<T> {
+  const response = await fetch(`/api/v1/${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (!response.ok) throw new Error((await response.json()).detail ?? "Request failed");
+  return response.status === 204 ? (undefined as T) : response.json() as Promise<T>;
+}
+
 export async function runScreen(family: string, screen: string, filters: Record<string, unknown>): Promise<TableResponse> {
   const response = await fetch(`/api/v1/screens/${family}/${screen}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filters }) });
   if (!response.ok) throw new Error((await response.json()).detail ?? "Unable to run screen");

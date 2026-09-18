@@ -177,3 +177,29 @@ The README update will land in Phase 3, when commands are executable:
 `uv run uvicorn src.api.main:app --reload` for the backend; `npm install` and
 `npm run dev` in `frontend/` for Vite; and the existing Streamlit command stays
 documented until parity is accepted.
+
+## Phase 4 parity checklist (remaining after the initial screener slice)
+
+The following workflows remain required before Streamlit can be retired. This
+checklist is intentionally interaction-level so a route that merely renders a
+table does not count as parity.
+
+- [ ] Dashboard: shared active-watchlist selection, formatted/conditional
+  universe table, and links into a ticker drill-down.
+- [ ] Deep Dive: ticker lookup/navigation; header metrics; valuation,
+  profitability, analyst, earnings, dividend, statement, news, and technical
+  tabs; all period/depth/unit/range controls; ECharts equivalents for every
+  existing Plotly chart.
+- [ ] Universe: add with notes; paste/upload bulk add; per-ticker refresh,
+  remove, re-add; refresh-all progress/results; snapshot coverage; price and
+  fundamentals drill-down with server pagination/date range.
+- [ ] Watchlists: create, rename, edit/replace membership, delete, paste/text
+  file import, active selection, and saving every screen result as a list.
+- [ ] Fundamental, forward, and technical screeners: every current filter,
+  watchlist display filtering, count/empty state, and save-result action.
+- [ ] Sectors: summary plus expandable/clickable constituent drill-down,
+  retaining full-universe medians while filtering displayed constituents.
+- [ ] Technical maintenance: recompute action with meaningful in-progress,
+  success, and failure feedback.
+- [ ] UX verification: accessible keyboard paths, mobile/desktop layouts,
+  API error states, and browser smoke coverage for every route above.
