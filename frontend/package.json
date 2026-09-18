@@ -15,6 +15,7 @@
     "echarts": "latest",
     "react": "latest",
     "react-dom": "latest"
+    ,"react-router-dom": "latest"
   },
   "devDependencies": {
     "@types/react": "latest",

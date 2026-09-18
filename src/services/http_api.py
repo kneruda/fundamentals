@@ -152,6 +152,20 @@ def screen(
     return table(result.rows, excluded_count=result.excluded_count)
 
 
+def sectors(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:
+    return table(queries.sector_summary(con))
+
+
+def sector_constituents(
+    con: duckdb.DuckDBPyConnection, sector: str, watchlist_id: int | None
+) -> dict[str, Any]:
+    return table(
+        queries.sector_constituents(
+            con, sector, display_filter=display_filter_for_watchlist(con, watchlist_id)
+        )
+    )
+
+
 def watchlists(con: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     return [
         {key: _json_value(value) for key, value in row.items()}

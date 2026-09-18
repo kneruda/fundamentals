@@ -147,6 +147,18 @@ def get_snapshot_coverage(con=Depends(get_connection)) -> dict:
     return http_api.table(queries.snapshot_coverage(con))
 
 
+@app.get("/api/v1/sectors", response_model=models.TableResponse)
+def get_sectors(con=Depends(get_connection)) -> dict:
+    return http_api.sectors(con)
+
+
+@app.get("/api/v1/sectors/{sector}/constituents", response_model=models.TableResponse)
+def get_sector_constituents(
+    sector: str, watchlist_id: int | None = None, con=Depends(get_connection)
+) -> dict:
+    return http_api.sector_constituents(con, sector, watchlist_id)
+
+
 @app.post("/api/v1/universe/tickers", response_model=models.ActionResult)
 def post_ticker(request: models.TickerCreateRequest, con=Depends(get_connection)) -> dict:
     return http_api.add_ticker(con, request.ticker, request.notes)
