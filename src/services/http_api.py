@@ -30,7 +30,13 @@ class UpstreamDataUnavailableError(RuntimeError):
 
 
 def _json_value(value: Any) -> Any:
-    if value is None or pd.isna(value):
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    if isinstance(value, dict):
+        return value
+    if pd.isna(value):
         return None
     if isinstance(value, (datetime, pd.Timestamp)):
         return value.isoformat()

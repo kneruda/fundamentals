@@ -46,13 +46,17 @@ def test_company_endpoints_serialize_existing_query_results(client):
 def test_company_news_uses_the_standard_table_contract(client, monkeypatch):
     monkeypatch.setattr(
         "src.services.http_api.fetch_news",
-        lambda ticker, limit: [{"date": "2026-01-02", "title": f"{ticker} news"}],
+        lambda ticker, limit: [
+            {"date": "2026-01-02", "title": f"{ticker} news", "tags": ["markets"]}
+        ],
     )
 
     response = client.get("/api/v1/companies/AAPL/news?limit=1")
 
     assert response.status_code == 200
-    assert response.json()["rows"] == [{"date": "2026-01-02", "title": "AAPL news"}]
+    assert response.json()["rows"] == [
+        {"date": "2026-01-02", "title": "AAPL news", "tags": ["markets"]}
+    ]
 
 
 def test_company_news_returns_a_safe_vendor_error(client, monkeypatch):

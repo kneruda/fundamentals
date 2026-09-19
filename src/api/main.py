@@ -4,6 +4,7 @@
 
 from collections.abc import Generator
 from datetime import date
+from pathlib import Path
 from typing import Literal
 
 import duckdb
@@ -14,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api import models
 from src.services import http_api, queries
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 app = FastAPI(title="Fundamentals Dashboard API", version="1.0.0")
 app.add_middleware(
