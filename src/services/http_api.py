@@ -215,11 +215,42 @@ def create_list(
     return watchlist_detail(con, create_watchlist(con, name, tickers, description))
 
 
+def create_list_input(
+    con: duckdb.DuckDBPyConnection,
+    name: str,
+    tickers: list[str],
+    text: str | None,
+    description: str | None,
+) -> dict[str, Any]:
+    """Create a list with the shared newline-oriented ticker parser."""
+    parsed = (
+        universe.parse_tickers(text) if text else [ticker.strip().upper() for ticker in tickers]
+    )
+    if not parsed:
+        raise ValueError("Provide at least one ticker.")
+    return create_list(con, name, parsed, description)
+
+
 def replace_list(
     con: duckdb.DuckDBPyConnection, watchlist_id: int, tickers: list[str]
 ) -> dict[str, Any]:
     replace_membership(con, watchlist_id, tickers)
     return watchlist_detail(con, watchlist_id)
+
+
+def replace_list_input(
+    con: duckdb.DuckDBPyConnection,
+    watchlist_id: int,
+    tickers: list[str],
+    text: str | None,
+) -> dict[str, Any]:
+    """Replace list members with the same parser used by Universe input."""
+    parsed = (
+        universe.parse_tickers(text) if text else [ticker.strip().upper() for ticker in tickers]
+    )
+    if not parsed:
+        raise ValueError("Provide at least one ticker.")
+    return replace_list(con, watchlist_id, parsed)
 
 
 def rename_list(con: duckdb.DuckDBPyConnection, watchlist_id: int, name: str) -> dict[str, Any]:

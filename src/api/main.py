@@ -241,7 +241,9 @@ def get_watchlists(con=Depends(get_connection)) -> list[dict]:
 )
 def post_watchlist(request: models.WatchlistCreateRequest, con=Depends(get_connection)) -> dict:
     try:
-        return http_api.create_list(con, request.name, request.tickers, request.description)
+        return http_api.create_list_input(
+            con, request.name, request.tickers, request.text, request.description
+        )
     except ValueError as exc:
         _bad_request(exc)
 
@@ -259,7 +261,7 @@ def put_watchlist(
     watchlist_id: int, request: models.WatchlistReplaceRequest, con=Depends(get_connection)
 ) -> dict:
     try:
-        return http_api.replace_list(con, watchlist_id, request.tickers)
+        return http_api.replace_list_input(con, watchlist_id, request.tickers, request.text)
     except ValueError as exc:
         _bad_request(exc)
 

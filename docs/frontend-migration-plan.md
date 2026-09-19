@@ -194,7 +194,7 @@ table does not count as parity.
 - [x] Universe: add with notes; paste/upload bulk add; per-ticker refresh,
   remove, re-add; refresh-all progress/results; snapshot coverage; price and
   fundamentals drill-down with server pagination/date range.
-- [ ] Watchlists: create, rename, edit/replace membership, delete, paste/text
+- [x] Watchlists: create, rename, edit/replace membership, delete, paste/text
   file import, active selection, and saving every screen result as a list.
 - [ ] Fundamental, forward, and technical screeners: every current filter,
   watchlist display filtering, count/empty state, and save-result action.

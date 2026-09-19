@@ -42,12 +42,14 @@ class WatchlistDetail(Watchlist):
 
 class WatchlistCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    tickers: list[str] = Field(min_length=1)
+    tickers: list[str] = Field(default_factory=list)
+    text: str | None = Field(default=None, max_length=100_000)
     description: str | None = Field(default=None, max_length=1000)
 
 
 class WatchlistReplaceRequest(BaseModel):
-    tickers: list[str] = Field(min_length=1)
+    tickers: list[str] = Field(default_factory=list)
+    text: str | None = Field(default=None, max_length=100_000)
 
 
 class WatchlistRenameRequest(BaseModel):

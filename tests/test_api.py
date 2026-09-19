@@ -124,3 +124,13 @@ def test_watchlist_crud_contract(client):
     assert created.status_code == 201
     assert replaced.status_code == 200
     assert deleted.status_code == 204
+
+
+def test_watchlist_text_input_uses_the_shared_ticker_parser(client):
+    created = client.post(
+        "/api/v1/watchlists",
+        json={"name": "Parsed list", "text": "aapl\n# comment\nMSFT\n"},
+    )
+
+    assert created.status_code == 201
+    assert created.json()["tickers"] == ["AAPL", "MSFT"]

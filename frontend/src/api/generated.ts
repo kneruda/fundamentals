@@ -701,7 +701,9 @@ export interface components {
             /** Name */
             name: string;
             /** Tickers */
-            tickers: string[];
+            tickers?: string[];
+            /** Text */
+            text?: string | null;
             /** Description */
             description?: string | null;
         };
@@ -728,7 +730,9 @@ export interface components {
         /** WatchlistReplaceRequest */
         WatchlistReplaceRequest: {
             /** Tickers */
-            tickers: string[];
+            tickers?: string[];
+            /** Text */
+            text?: string | null;
         };
     };
     responses: never;
