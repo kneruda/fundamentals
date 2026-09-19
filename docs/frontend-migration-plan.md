@@ -184,7 +184,7 @@ The following workflows remain required before Streamlit can be retired. This
 checklist is intentionally interaction-level so a route that merely renders a
 table does not count as parity.
 
-- [ ] Dashboard: shared active-watchlist selection, formatted/conditional
+- [x] Dashboard: shared active-watchlist selection, formatted/conditional
   universe table, and links into a ticker drill-down.
 - [x] Deep Dive: ticker lookup/navigation; header metrics; valuation,
   profitability, analyst, earnings, dividend, statement, news, and technical

@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   AnalystPanel,
@@ -14,15 +15,23 @@ import { NewsPanel, StatementsPanel, TechnicalsPanel } from "./CompanyResearchPa
 import { useCompanyData } from "./useCompanyData";
 
 export function CompanyPage() {
-  const [tickerInput, setTickerInput] = useState("AAPL");
-  const [ticker, setTicker] = useState("AAPL");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTicker = searchParams.get("ticker")?.trim().toUpperCase() || "AAPL";
+  const [tickerInput, setTickerInput] = useState(initialTicker);
+  const [ticker, setTicker] = useState(initialTicker);
   const [tab, setTab] = useState<Tab>("valuation");
   const overview = useCompanyData<Overview>(`companies/${ticker}/overview`);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextTicker = tickerInput.trim().toUpperCase();
-    if (nextTicker) setTicker(nextTicker);
+    if (nextTicker) selectTicker(nextTicker);
+  }
+
+  function selectTicker(nextTicker: string) {
+    setTicker(nextTicker);
+    setTickerInput(nextTicker);
+    setSearchParams({ ticker: nextTicker });
   }
 
   function moveTab(event: KeyboardEvent<HTMLButtonElement>, current: Tab) {
