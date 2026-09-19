@@ -37,7 +37,7 @@ export function DataGrid({ data, onTickerSelect }: DataGridProps) {
     } : undefined,
     valueFormatter: ({ value }) => formatValue(key, value),
   }));
-  return <div className="ag-theme-quartz grid"><AgGridReact rowData={data.rows} columnDefs={columnDefs} pagination paginationPageSize={50}/></div>;
+  return <div className="ag-theme-quartz grid"><AgGridReact theme="legacy" rowData={data.rows} columnDefs={columnDefs} pagination paginationPageSize={50}/></div>;
 }
 
 function formatValue(key: string, value: unknown): string {

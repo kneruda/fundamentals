@@ -196,11 +196,11 @@ table does not count as parity.
   fundamentals drill-down with server pagination/date range.
 - [x] Watchlists: create, rename, edit/replace membership, delete, paste/text
   file import, active selection, and saving every screen result as a list.
-- [ ] Fundamental, forward, and technical screeners: every current filter,
+- [x] Fundamental, forward, and technical screeners: every current filter,
   watchlist display filtering, count/empty state, and save-result action.
 - [ ] Sectors: summary plus expandable/clickable constituent drill-down,
   retaining full-universe medians while filtering displayed constituents.
-- [ ] Technical maintenance: recompute action with meaningful in-progress,
+- [x] Technical maintenance: recompute action with meaningful in-progress,
   success, and failure feedback.
 - [ ] UX verification: accessible keyboard paths, mobile/desktop layouts,
   API error states, and browser smoke coverage for every route above.
