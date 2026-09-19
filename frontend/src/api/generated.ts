@@ -208,6 +208,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/companies/{ticker}/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Company News */
+        get: operations["get_company_news_api_v1_companies__ticker__news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/universe": {
         parameters: {
             query?: never;
@@ -234,6 +251,40 @@ export interface paths {
         };
         /** Get Snapshot Coverage */
         get: operations["get_snapshot_coverage_api_v1_universe_snapshot_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Sectors */
+        get: operations["get_sectors_api_v1_sectors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sectors/{sector}/constituents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Sector Constituents */
+        get: operations["get_sector_constituents_api_v1_sectors__sector__constituents_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -958,6 +1009,39 @@ export interface operations {
             };
         };
     };
+    get_company_news_api_v1_companies__ticker__news_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_universe_api_v1_universe_get: {
         parameters: {
             query?: {
@@ -1005,6 +1089,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TableResponse"];
+                };
+            };
+        };
+    };
+    get_sectors_api_v1_sectors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableResponse"];
+                };
+            };
+        };
+    };
+    get_sector_constituents_api_v1_sectors__sector__constituents_get: {
+        parameters: {
+            query?: {
+                watchlist_id?: number | null;
+            };
+            header?: never;
+            path: {
+                sector: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

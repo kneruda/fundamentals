@@ -7,11 +7,14 @@ from datetime import date
 from typing import Literal
 
 import duckdb
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api import models
 from src.services import http_api, queries
+
+load_dotenv()
 
 app = FastAPI(title="Fundamentals Dashboard API", version="1.0.0")
 app.add_middleware(
@@ -132,6 +135,16 @@ def get_company_prices(
         date_from=str(date_from) if date_from else None,
         date_to=str(date_to) if date_to else None,
     )
+
+
+@app.get("/api/v1/companies/{ticker}/news", response_model=models.TableResponse)
+def get_company_news(ticker: str, limit: int = 50) -> dict:
+    try:
+        return http_api.company_news(ticker.upper(), limit)
+    except http_api.UpstreamDataUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
 
 
 @app.get("/api/v1/universe", response_model=models.TableResponse)

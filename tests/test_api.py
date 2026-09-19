@@ -43,6 +43,33 @@ def test_company_endpoints_serialize_existing_query_results(client):
     assert prices.json()["total"] >= len(prices.json()["rows"])
 
 
+def test_company_news_uses_the_standard_table_contract(client, monkeypatch):
+    monkeypatch.setattr(
+        "src.services.http_api.fetch_news",
+        lambda ticker, limit: [{"date": "2026-01-02", "title": f"{ticker} news"}],
+    )
+
+    response = client.get("/api/v1/companies/AAPL/news?limit=1")
+
+    assert response.status_code == 200
+    assert response.json()["rows"] == [{"date": "2026-01-02", "title": "AAPL news"}]
+
+
+def test_company_news_returns_a_safe_vendor_error(client, monkeypatch):
+    monkeypatch.setattr(
+        "src.services.http_api.fetch_news",
+        lambda ticker, limit: (_ for _ in ()).throw(OSError("token missing")),
+    )
+
+    response = client.get("/api/v1/companies/AAPL/news")
+
+    assert response.status_code == 503
+    assert (
+        response.json()["detail"]
+        == "Recent news is currently unavailable from the market-data provider."
+    )
+
+
 def test_screen_endpoint_uses_existing_screen_service(client):
     response = client.post(
         "/api/v1/screens/fundamental/absolute_valuation",

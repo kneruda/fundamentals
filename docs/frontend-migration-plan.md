@@ -186,10 +186,11 @@ table does not count as parity.
 
 - [ ] Dashboard: shared active-watchlist selection, formatted/conditional
   universe table, and links into a ticker drill-down.
-- [ ] Deep Dive: ticker lookup/navigation; header metrics; valuation,
+- [x] Deep Dive: ticker lookup/navigation; header metrics; valuation,
   profitability, analyst, earnings, dividend, statement, news, and technical
   tabs; all period/depth/unit/range controls; ECharts equivalents for every
-  existing Plotly chart.
+  existing Plotly chart. Vendor news has a visible, safe unavailable state
+  when its optional upstream service cannot be reached.
 - [ ] Universe: add with notes; paste/upload bulk add; per-ticker refresh,
   remove, re-add; refresh-all progress/results; snapshot coverage; price and
   fundamentals drill-down with server pagination/date range.

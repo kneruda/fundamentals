@@ -8,6 +8,7 @@ import pandas as pd
 
 from src import universe
 from src.compute.technicals import recompute_technicals
+from src.ingest.fetch import fetch_news
 from src.services import queries
 from src.services.screeners import (
     run_forward_screen,
@@ -22,6 +23,10 @@ from src.watchlist import (
     rename_watchlist,
     replace_membership,
 )
+
+
+class UpstreamDataUnavailableError(RuntimeError):
+    """Raised when an optional vendor-backed dashboard surface is unavailable."""
 
 
 def _json_value(value: Any) -> Any:
@@ -130,6 +135,21 @@ def company_prices(con: duckdb.DuckDBPyConnection, ticker: str, **params: Any) -
         con, ticker, date_from=params.get("date_from"), date_to=params.get("date_to")
     )
     return table(df, total=total)
+
+
+def company_news(ticker: str, limit: int = 50) -> dict[str, Any]:
+    """Return the existing vendor news payload in the standard table contract.
+
+    News is the sole Deep Dive surface backed by the vendor rather than the
+    warehouse.  Keeping that call here preserves a Streamlit-free HTTP layer
+    and lets the UI use the same typed table response as every other surface.
+    """
+    try:
+        return table(pd.DataFrame(fetch_news(ticker, limit=limit)))
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise UpstreamDataUnavailableError(
+            "Recent news is currently unavailable from the market-data provider."
+        ) from exc
 
 
 def screen(
