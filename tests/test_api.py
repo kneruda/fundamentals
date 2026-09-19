@@ -28,6 +28,7 @@ def test_openapi_exposes_typed_dashboard_contract(client):
     schema = client.get("/openapi.json").json()
 
     assert "/api/v1/dashboard" in schema["paths"]
+    assert "/api/v1/universe/refresh" in schema["paths"]
     assert "DashboardResponse" in schema["components"]["schemas"]
 
 
@@ -41,6 +42,33 @@ def test_company_endpoints_serialize_existing_query_results(client):
     assert "history" in valuation.json()
     assert prices.status_code == 200
     assert prices.json()["total"] >= len(prices.json()["rows"])
+
+
+def test_universe_fundamentals_endpoint_uses_existing_statement_queries(client):
+    response = client.get("/api/v1/universe/tickers/AAPL/fundamentals?period_type=annual")
+
+    assert response.status_code == 200
+    assert response.json()["income_statement"]["rows"]
+    assert response.json()["balance_sheet"]["rows"]
+    assert response.json()["cash_flow"]["rows"]
+
+
+def test_bulk_universe_endpoint_uses_the_shared_ticker_parser(client, monkeypatch):
+    captured: list[str] = []
+
+    def record_tickers(con, tickers):
+        captured.extend(tickers)
+        return [{"ticker": ticker, "ok": True, "message": "added"} for ticker in tickers]
+
+    monkeypatch.setattr("src.services.http_api.bulk_add_tickers", record_tickers)
+
+    response = client.post(
+        "/api/v1/universe/tickers/bulk",
+        json={"text": "aapl\n# comment\nMSFT\n"},
+    )
+
+    assert response.status_code == 200
+    assert captured == ["AAPL", "MSFT"]
 
 
 def test_company_news_uses_the_standard_table_contract(client, monkeypatch):

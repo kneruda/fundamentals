@@ -344,6 +344,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/universe/tickers/{ticker}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Refresh Ticker */
+        post: operations["post_refresh_ticker_api_v1_universe_tickers__ticker__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/universe/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Refresh Universe */
+        post: operations["post_refresh_universe_api_v1_universe_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/universe/refresh/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Refresh Universe */
+        get: operations["get_refresh_universe_api_v1_universe_refresh__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/universe/tickers/{ticker}/fundamentals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Universe Ticker Fundamentals */
+        get: operations["get_universe_ticker_fundamentals_api_v1_universe_tickers__ticker__fundamentals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/technicals/recompute": {
         parameters: {
             query?: never;
@@ -437,7 +505,9 @@ export interface components {
         /** BulkTickerCreateRequest */
         BulkTickerCreateRequest: {
             /** Tickers */
-            tickers: string[];
+            tickers?: string[];
+            /** Text */
+            text?: string | null;
         };
         /** ColumnMeta */
         ColumnMeta: {
@@ -527,6 +597,41 @@ export interface components {
             /** Warehouse Updated At */
             warehouse_updated_at?: string | null;
         };
+        /** RefreshJobResponse */
+        RefreshJobResponse: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "complete" | "failed";
+            /** Total */
+            total: number;
+            /**
+             * Fetched
+             * @default 0
+             */
+            fetched: number;
+            /**
+             * Ingested
+             * @default 0
+             */
+            ingested: number;
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /** Current Ticker */
+            current_ticker?: string | null;
+            /** Results */
+            results?: {
+                [key: string]: unknown;
+            }[];
+            /** Error */
+            error?: string | null;
+        };
         /** ScreenRequest */
         ScreenRequest: {
             /** Watchlist Id */
@@ -558,6 +663,12 @@ export interface components {
             ticker: string;
             /** Notes */
             notes?: string | null;
+        };
+        /** UniverseFundamentalsResponse */
+        UniverseFundamentalsResponse: {
+            income_statement: components["schemas"]["TableResponse"];
+            balance_sheet: components["schemas"]["TableResponse"];
+            cash_flow: components["schemas"]["TableResponse"];
         };
         /** ValidationError */
         ValidationError: {
@@ -1229,6 +1340,121 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_refresh_ticker_api_v1_universe_tickers__ticker__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_refresh_universe_api_v1_universe_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshJobResponse"];
+                };
+            };
+        };
+    };
+    get_refresh_universe_api_v1_universe_refresh__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_universe_ticker_fundamentals_api_v1_universe_tickers__ticker__fundamentals_get: {
+        parameters: {
+            query?: {
+                period_type?: "quarterly" | "annual";
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UniverseFundamentalsResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

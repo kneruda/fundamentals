@@ -191,7 +191,7 @@ table does not count as parity.
   tabs; all period/depth/unit/range controls; ECharts equivalents for every
   existing Plotly chart. Vendor news has a visible, safe unavailable state
   when its optional upstream service cannot be reached.
-- [ ] Universe: add with notes; paste/upload bulk add; per-ticker refresh,
+- [x] Universe: add with notes; paste/upload bulk add; per-ticker refresh,
   remove, re-add; refresh-all progress/results; snapshot coverage; price and
   fundamentals drill-down with server pagination/date range.
 - [ ] Watchlists: create, rename, edit/replace membership, delete, paste/text

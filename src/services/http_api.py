@@ -9,7 +9,7 @@ import pandas as pd
 from src import universe
 from src.compute.technicals import recompute_technicals
 from src.ingest.fetch import fetch_news
-from src.services import queries
+from src.services import queries, universe_jobs
 from src.services.screeners import (
     run_forward_screen,
     run_fundamental_screen,
@@ -242,6 +242,38 @@ def bulk_add_tickers(con: duckdb.DuckDBPyConnection, tickers: list[str]) -> list
         {"ticker": ticker, "ok": ok, "message": message}
         for ticker, ok, message in universe.bulk_add_tickers(con, tickers)
     ]
+
+
+def bulk_add_ticker_input(
+    con: duckdb.DuckDBPyConnection, tickers: list[str], text: str | None
+) -> list[dict[str, Any]]:
+    """Use the shared ticker parser for pasted or uploaded universe input."""
+    parsed = (
+        universe.parse_tickers(text) if text else [ticker.strip().upper() for ticker in tickers]
+    )
+    if not parsed:
+        raise ValueError("Provide at least one ticker.")
+    return bulk_add_tickers(con, parsed)
+
+
+def universe_fundamentals(
+    con: duckdb.DuckDBPyConnection, ticker: str, period_type: str
+) -> dict[str, Any]:
+    n_periods = 8 if period_type == "quarterly" else 5
+    return {
+        statement_type: table(
+            queries.fundamentals_recent(con, ticker, statement_type, period_type, n_periods)
+        )
+        for statement_type in ("income_statement", "balance_sheet", "cash_flow")
+    }
+
+
+def start_universe_refresh() -> dict[str, Any]:
+    return universe_jobs.start_refresh_all()
+
+
+def universe_refresh_job(job_id: str) -> dict[str, Any]:
+    return universe_jobs.get_refresh_job(job_id)
 
 
 def remove_ticker(con: duckdb.DuckDBPyConnection, ticker: str) -> None:

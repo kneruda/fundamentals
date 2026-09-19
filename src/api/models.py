@@ -92,7 +92,8 @@ class TickerCreateRequest(BaseModel):
 
 
 class BulkTickerCreateRequest(BaseModel):
-    tickers: list[str] = Field(min_length=1)
+    tickers: list[str] = Field(default_factory=list)
+    text: str | None = Field(default=None, max_length=100_000)
 
 
 class ActionResult(BaseModel):
@@ -102,3 +103,21 @@ class ActionResult(BaseModel):
 
 class BulkActionResult(BaseModel):
     results: list[dict[str, Any]]
+
+
+class UniverseFundamentalsResponse(BaseModel):
+    income_statement: TableResponse
+    balance_sheet: TableResponse
+    cash_flow: TableResponse
+
+
+class RefreshJobResponse(BaseModel):
+    job_id: str
+    status: Literal["queued", "running", "complete", "failed"]
+    total: int
+    fetched: int = 0
+    ingested: int = 0
+    failed: int = 0
+    current_ticker: str | None = None
+    results: list[dict[str, Any]] = Field(default_factory=list)
+    error: str | None = None

@@ -180,13 +180,49 @@ def post_ticker(request: models.TickerCreateRequest, con=Depends(get_connection)
 
 @app.post("/api/v1/universe/tickers/bulk", response_model=models.BulkActionResult)
 def post_bulk_tickers(request: models.BulkTickerCreateRequest, con=Depends(get_connection)) -> dict:
-    return {"results": http_api.bulk_add_tickers(con, request.tickers)}
+    try:
+        return {"results": http_api.bulk_add_ticker_input(con, request.tickers, request.text)}
+    except ValueError as exc:
+        _bad_request(exc)
 
 
 @app.delete("/api/v1/universe/tickers/{ticker}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_ticker(ticker: str, con=Depends(get_connection)) -> Response:
     http_api.remove_ticker(con, ticker)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.post("/api/v1/universe/tickers/{ticker}/refresh", response_model=models.ActionResult)
+def post_refresh_ticker(ticker: str, con=Depends(get_connection)) -> dict:
+    return http_api.add_ticker(con, ticker, None)
+
+
+@app.post("/api/v1/universe/refresh", response_model=models.RefreshJobResponse)
+def post_refresh_universe() -> dict:
+    try:
+        return http_api.start_universe_refresh()
+    except ValueError as exc:
+        _bad_request(exc)
+
+
+@app.get("/api/v1/universe/refresh/{job_id}", response_model=models.RefreshJobResponse)
+def get_refresh_universe(job_id: str) -> dict:
+    try:
+        return http_api.universe_refresh_job(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@app.get(
+    "/api/v1/universe/tickers/{ticker}/fundamentals",
+    response_model=models.UniverseFundamentalsResponse,
+)
+def get_universe_ticker_fundamentals(
+    ticker: str,
+    period_type: Literal["quarterly", "annual"] = "quarterly",
+    con=Depends(get_connection),
+) -> dict:
+    return http_api.universe_fundamentals(con, ticker.upper(), period_type)
 
 
 @app.post("/api/v1/technicals/recompute", status_code=status.HTTP_204_NO_CONTENT)
