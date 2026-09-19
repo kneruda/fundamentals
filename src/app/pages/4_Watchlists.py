@@ -2,8 +2,8 @@
 
 import streamlit as st
 
-from src.app import queries
 from src.app import sidebar as app_sidebar
+from src.services import queries
 from src.ticker_input import parse_ticker_input
 from src.watchlist import create_watchlist, delete_watchlist, get_membership, replace_membership
 

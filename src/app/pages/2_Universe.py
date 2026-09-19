@@ -10,8 +10,8 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from src import universe as univ
-from src.app import queries
 from src.ingest.orchestrator import refresh_universe_threaded
+from src.services import queries
 
 load_dotenv()
 
